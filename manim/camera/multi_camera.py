@@ -1,7 +1,11 @@
 """A camera supporting multiple perspectives."""
 
+from __future__ import annotations
+
 __all__ = ["MultiCamera"]
 
+
+from manim.mobject.types.image_mobject import ImageMobject
 
 from ..camera.moving_camera import MovingCamera
 from ..utils.iterables import list_difference_update
@@ -12,15 +16,15 @@ class MultiCamera(MovingCamera):
 
     def __init__(
         self,
-        image_mobjects_from_cameras=None,
+        image_mobjects_from_cameras: ImageMobject | None = None,
         allow_cameras_to_capture_their_own_display=False,
-        **kwargs
+        **kwargs,
     ):
         """Initialises the MultiCamera
 
         Parameters
         ----------
-        image_mobjects_from_cameras : ImageMobject
+        image_mobjects_from_cameras
 
         kwargs
             Any valid keyword arguments of MovingCamera.
@@ -34,13 +38,13 @@ class MultiCamera(MovingCamera):
         )
         super().__init__(**kwargs)
 
-    def add_image_mobject_from_camera(self, image_mobject_from_camera):
+    def add_image_mobject_from_camera(self, image_mobject_from_camera: ImageMobject):
         """Adds an ImageMobject that's been obtained from the camera
         into the list ``self.image_mobject_from_cameras``
 
         Parameters
         ----------
-        image_mobject_from_camera : ImageMobject
+        image_mobject_from_camera
             The ImageMobject to add to self.image_mobject_from_cameras
         """
         # A silly method to have right now, but maybe there are things

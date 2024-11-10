@@ -1,19 +1,23 @@
+from __future__ import annotations
+
+import contextlib
 import itertools as it
 import time
+from functools import cached_property
+from typing import Any
 
 import moderngl
 import numpy as np
 from PIL import Image
 
 from manim import config, logger
-from manim.renderer.cairo_renderer import handle_play_like_call
+from manim.mobject.opengl.opengl_mobject import OpenGLMobject, OpenGLPoint
+from manim.mobject.opengl.opengl_vectorized_mobject import OpenGLVMobject
 from manim.utils.caching import handle_caching_play
 from manim.utils.color import color_to_rgba
 from manim.utils.exceptions import EndSceneEarlyException
 
 from ..constants import *
-from ..mobject.opengl_mobject import OpenGLMobject, OpenGLPoint
-from ..mobject.types.opengl_vectorized_mobject import OpenGLVMobject
 from ..scene.scene_file_writer import SceneFileWriter
 from ..utils import opengl
 from ..utils.config_ops import _Data
@@ -30,6 +34,8 @@ from .vectorized_mobject_rendering import (
     render_opengl_vectorized_mobject_fill,
     render_opengl_vectorized_mobject_stroke,
 )
+
+__all__ = ["OpenGLCamera", "OpenGLRenderer"]
 
 
 class OpenGLCamera(OpenGLMobject):
@@ -57,12 +63,12 @@ class OpenGLCamera(OpenGLMobject):
         if self.orthographic:
             self.projection_matrix = opengl.orthographic_projection_matrix()
             self.unformatted_projection_matrix = opengl.orthographic_projection_matrix(
-                format=False,
+                format_=False,
             )
         else:
             self.projection_matrix = opengl.perspective_projection_matrix()
             self.unformatted_projection_matrix = opengl.perspective_projection_matrix(
-                format=False,
+                format_=False,
             )
 
         if frame_shape is None:
@@ -103,11 +109,13 @@ class OpenGLCamera(OpenGLMobject):
         self.model_matrix[:, 3][:3] = position
         return self
 
-    def get_view_matrix(self, format=True):
-        if format:
-            return opengl.matrix_to_shader_input(np.linalg.inv(self.model_matrix))
-        else:
-            return np.linalg.inv(self.model_matrix)
+    @cached_property
+    def formatted_view_matrix(self):
+        return opengl.matrix_to_shader_input(np.linalg.inv(self.model_matrix))
+
+    @cached_property
+    def unformatted_view_matrix(self):
+        return np.linalg.inv(self.model_matrix)
 
     def init_points(self):
         self.set_points([ORIGIN, LEFT, RIGHT, DOWN, UP])
@@ -207,17 +215,12 @@ class OpenGLCamera(OpenGLMobject):
         self.refresh_rotation_matrix()
 
 
-points_per_curve = 3
-JOINT_TYPE_MAP = {
-    "auto": 0,
-    "round": 1,
-    "bevel": 2,
-    "miter": 3,
-}
-
-
 class OpenGLRenderer:
-    def __init__(self, file_writer_class=SceneFileWriter, skip_animations=False):
+    def __init__(
+        self,
+        file_writer_class: type[SceneFileWriter] = SceneFileWriter,
+        skip_animations: bool = False,
+    ) -> None:
         # Measured in pixel widths, used for vector graphics
         self.anti_alias_width = 1.5
         self._file_writer_class = file_writer_class
@@ -225,6 +228,8 @@ class OpenGLRenderer:
         self._original_skipping_status = skip_animations
         self.skip_animations = skip_animations
         self.animation_start_time = 0
+        self.animation_elapsed_time = 0
+        self.time = 0
         self.animations_hashes = []
         self.num_plays = 0
 
@@ -234,15 +239,16 @@ class OpenGLRenderer:
         # Initialize texture map.
         self.path_to_texture_id = {}
 
-        self._background_color = color_to_rgba(config["background_color"], 1.0)
+        self.background_color = config["background_color"]
 
     def init_scene(self, scene):
         self.partial_movie_files = []
-        self.file_writer = self._file_writer_class(
+        self.file_writer: Any = self._file_writer_class(
             self,
             scene.__class__.__name__,
         )
         self.scene = scene
+        self.background_color = config["background_color"]
         if not hasattr(self, "window"):
             if self.should_create_window():
                 from .opengl_renderer_window import Window
@@ -282,6 +288,7 @@ class OpenGLRenderer:
             and not config["save_last_frame"]
             and not config["format"]
             and not config["write_to_movie"]
+            and not config["dry_run"]
         )
 
     def get_pixel_shape(self):
@@ -334,12 +341,12 @@ class OpenGLRenderer:
                 shader_wrapper.uniforms.items(),
                 self.perspective_uniforms.items(),
             ):
-                try:
+                with contextlib.suppress(KeyError):
                     shader.set_uniform(name, value)
-                except KeyError:
-                    pass
             try:
-                shader.set_uniform("u_view_matrix", self.scene.camera.get_view_matrix())
+                shader.set_uniform(
+                    "u_view_matrix", self.scene.camera.formatted_view_matrix
+                )
                 shader.set_uniform(
                     "u_projection_matrix",
                     self.scene.camera.projection_matrix,
@@ -365,18 +372,21 @@ class OpenGLRenderer:
             mesh.render()
 
     def get_texture_id(self, path):
-        if path not in self.path_to_texture_id:
-            # A way to increase tid's sequentially
+        if repr(path) not in self.path_to_texture_id:
             tid = len(self.path_to_texture_id)
-            im = Image.open(path)
             texture = self.context.texture(
-                size=im.size,
-                components=len(im.getbands()),
-                data=im.tobytes(),
+                size=path.size,
+                components=len(path.getbands()),
+                data=path.tobytes(),
             )
+            texture.repeat_x = False
+            texture.repeat_y = False
+            texture.filter = (moderngl.NEAREST, moderngl.NEAREST)
+            texture.swizzle = "RRR1" if path.mode == "L" else "RGBA"
             texture.use(location=tid)
-            self.path_to_texture_id[path] = tid
-        return self.path_to_texture_id[path]
+            self.path_to_texture_id[repr(path)] = tid
+
+        return self.path_to_texture_id[repr(path)]
 
     def update_skipping_status(self):
         """
@@ -386,6 +396,9 @@ class OpenGLRenderer:
         the number of animations that need to be played, and
         raises an EndSceneEarlyException if they don't correspond.
         """
+        # there is always at least one section -> no out of bounds here
+        if self.file_writer.sections[-1].skip_animations:
+            self.skip_animations = True
         if (
             config["from_animation_number"]
             and self.num_plays < config["from_animation_number"]
@@ -399,12 +412,33 @@ class OpenGLRenderer:
             raise EndSceneEarlyException()
 
     @handle_caching_play
-    @handle_play_like_call
     def play(self, scene, *args, **kwargs):
         # TODO: Handle data locking / unlocking.
-        if scene.compile_animation_data(*args, **kwargs):
-            scene.begin_animations()
+        self.animation_start_time = time.time()
+        self.file_writer.begin_animation(not self.skip_animations)
+
+        scene.compile_animation_data(*args, **kwargs)
+        scene.begin_animations()
+        if scene.is_current_animation_frozen_frame():
+            self.update_frame(scene)
+
+            if not self.skip_animations:
+                self.file_writer.write_frame(
+                    self, num_frames=int(config.frame_rate * scene.duration)
+                )
+
+            if self.window is not None:
+                self.window.swap_buffers()
+                while time.time() - self.animation_start_time < scene.duration:
+                    pass
+            self.animation_elapsed_time = scene.duration
+
+        else:
             scene.play_internal()
+
+        self.file_writer.end_animation(not self.skip_animations)
+        self.time += scene.duration
+        self.num_plays += 1
 
     def clear_screen(self):
         self.frame_buffer_object.clear(*self.background_color)
@@ -443,12 +477,22 @@ class OpenGLRenderer:
     def scene_finished(self, scene):
         # When num_plays is 0, no images have been output, so output a single
         # image in this case
-        if config["save_last_frame"] or (
-            config["format"] == "png" and self.num_plays == 0
-        ):
+        if self.num_plays > 0:
+            self.file_writer.finish()
+        elif self.num_plays == 0 and config.write_to_movie:
+            config.write_to_movie = False
+
+        if self.should_save_last_frame():
+            config.save_last_frame = True
             self.update_frame(scene)
             self.file_writer.save_final_image(self.get_image())
-        self.file_writer.finish()
+
+    def should_save_last_frame(self):
+        if config["save_last_frame"]:
+            return True
+        if self.scene.interactive_mode:
+            return False
+        return self.num_plays == 0
 
     def get_image(self) -> Image.Image:
         """Returns an image from the current frame. The first argument passed to image represents
@@ -520,19 +564,23 @@ class OpenGLRenderer:
         return np_buf
 
     # Returns offset from the bottom left corner in pixels.
-    def pixel_coords_to_space_coords(self, px, py, relative=False):
+    # top_left flag should be set to True when using a GUI framework
+    # where the (0,0) is at the top left: e.g. PySide6
+    def pixel_coords_to_space_coords(self, px, py, relative=False, top_left=False):
         pixel_shape = self.get_pixel_shape()
         if pixel_shape is None:
             return np.array([0, 0, 0])
         pw, ph = pixel_shape
-        fw, fh = config["frame_width"], config["frame_height"]
+        fh = config["frame_height"]
         fc = self.camera.get_center()
         if relative:
             return 2 * np.array([px / pw, py / ph, 0])
         else:
             # Only scale wrt one axis
             scale = fh / ph
-            return fc + scale * np.array([(px - pw / 2), (py - ph / 2), 0])
+            return fc + scale * np.array(
+                [(px - pw / 2), (-1 if top_left else 1) * (py - ph / 2), 0]
+            )
 
     @property
     def background_color(self):

@@ -1,5 +1,7 @@
 """Utilities for scene caching."""
 
+from __future__ import annotations
+
 import collections
 import copy
 import inspect
@@ -12,7 +14,16 @@ from typing import Any
 
 import numpy as np
 
+from manim.animation.animation import Animation
+from manim.camera.camera import Camera
+from manim.mobject.mobject import Mobject
+
 from .. import config, logger
+
+if typing.TYPE_CHECKING:
+    from manim.scene.scene import Scene
+
+__all__ = ["KEYS_TO_FILTER_OUT", "get_hash_from_play_call", "get_json"]
 
 # Sometimes there are elements that are not suitable for hashing (too long or
 # run-dependent).  This is used to filter them out.
@@ -48,14 +59,14 @@ class _Memoizer:
         cls._already_processed.clear()
 
     @classmethod
-    def check_already_processed_decorator(cls: "_Memoizer", is_method=False):
+    def check_already_processed_decorator(cls: _Memoizer, is_method: bool = False):
         """Decorator to handle the arguments that goes through the decorated function.
         Returns _ALREADY_PROCESSED_PLACEHOLDER if the obj has been processed, or lets
         the decorated function call go ahead.
 
         Parameters
         ----------
-        is_method : bool, optional
+        is_method
             Whether the function passed is a method, by default False.
         """
 
@@ -79,7 +90,7 @@ class _Memoizer:
 
         Parameters
         ----------
-        obj : Any
+        obj
             The object to check.
 
         Returns
@@ -96,7 +107,7 @@ class _Memoizer:
 
         Parameters
         ----------
-        obj : Any
+        obj
             The object to mark as processed.
         """
         cls._handle_already_processed(obj, lambda x: x)
@@ -108,18 +119,15 @@ class _Memoizer:
         obj,
         default_function: typing.Callable[[Any], Any],
     ):
-        if (
-            isinstance(
-                obj,
-                (
-                    int,
-                    float,
-                    str,
-                    complex,
-                ),
-            )
-            and obj not in [None, cls.ALREADY_PROCESSED_PLACEHOLDER]
-        ):
+        if isinstance(
+            obj,
+            (
+                int,
+                float,
+                str,
+                complex,
+            ),
+        ) and obj not in [None, cls.ALREADY_PROCESSED_PLACEHOLDER]:
             # It makes no sense (and it'd slower) to memoize objects of these primitive
             # types.  Hence, we simply return the object.
             return obj
@@ -140,7 +148,7 @@ class _Memoizer:
         obj_to_membership_sign: typing.Callable[[Any], int],
         default_func,
         memoizing=True,
-    ) -> typing.Union[str, Any]:
+    ) -> str | Any:
         obj_membership_sign = obj_to_membership_sign(obj)
         if obj_membership_sign in cls._already_processed:
             return cls.ALREADY_PROCESSED_PLACEHOLDER
@@ -165,7 +173,7 @@ class _Memoizer:
 
 
 class _CustomEncoder(json.JSONEncoder):
-    def default(self, obj):
+    def default(self, obj: Any):
         """
         This method is used to serialize objects to JSON format.
 
@@ -179,7 +187,7 @@ class _CustomEncoder(json.JSONEncoder):
 
         Parameters
         ----------
-        obj : Any
+        obj
             Arbitrary object to convert
 
         Returns
@@ -201,7 +209,7 @@ class _CustomEncoder(json.JSONEncoder):
                     del cvardict[i]
             try:
                 code = inspect.getsource(obj)
-            except OSError:
+            except (OSError, TypeError):
                 # This happens when rendering videos included in the documentation
                 # within doctests and should be replaced by a solution avoiding
                 # hash collision (due to the same, empty, code strings) at some point.
@@ -215,7 +223,7 @@ class _CustomEncoder(json.JSONEncoder):
             # We return the repr and not a list to avoid the JsonEncoder to iterate over it.
             return repr(obj)
         elif hasattr(obj, "__dict__"):
-            temp = getattr(obj, "__dict__")
+            temp = obj.__dict__
             # MappingProxy is scene-caching nightmare. It contains all of the object methods and attributes. We skip it as the mechanism will at some point process the object, but instantiated.
             # Indeed, there is certainly no case where scene-caching will receive only a non instancied object, as this is never used in the library or encouraged to be used user-side.
             if isinstance(temp, MappingProxyType):
@@ -226,7 +234,7 @@ class _CustomEncoder(json.JSONEncoder):
         # Serialize it with only the type of the object. You can change this to whatever string when debugging the serialization process.
         return str(type(obj))
 
-    def _cleaned_iterable(self, iterable):
+    def _cleaned_iterable(self, iterable: typing.Iterable[Any]):
         """Check for circular reference at each iterable that will go through the JSONEncoder, as well as key of the wrong format.
 
         If a key with a bad format is found (i.e not a int, string, or float), it gets replaced byt its hash using the same process implemented here.
@@ -234,7 +242,7 @@ class _CustomEncoder(json.JSONEncoder):
 
         Parameters
         ----------
-        iterable : Iterable[Any]
+        iterable
             The iterable to check.
         """
 
@@ -279,12 +287,12 @@ class _CustomEncoder(json.JSONEncoder):
         elif isinstance(iterable, dict):
             return _iter_check_dict(iterable)
 
-    def encode(self, obj):
+    def encode(self, obj: Any):
         """Overriding of :meth:`JSONEncoder.encode`, to make our own process.
 
         Parameters
         ----------
-        obj: Any
+        obj
             The object to encode in JSON.
 
         Returns
@@ -298,12 +306,12 @@ class _CustomEncoder(json.JSONEncoder):
         return super().encode(obj)
 
 
-def get_json(obj):
+def get_json(obj: dict):
     """Recursively serialize `object` to JSON using the :class:`CustomEncoder` class.
 
     Parameters
     ----------
-    dict_config : :class:`dict`
+    obj
         The dict to flatten
 
     Returns
@@ -315,25 +323,25 @@ def get_json(obj):
 
 
 def get_hash_from_play_call(
-    scene_object,
-    camera_object,
-    animations_list,
-    current_mobjects_list,
+    scene_object: Scene,
+    camera_object: Camera,
+    animations_list: typing.Iterable[Animation],
+    current_mobjects_list: typing.Iterable[Mobject],
 ) -> str:
     """Take the list of animations and a list of mobjects and output their hashes. This is meant to be used for `scene.play` function.
 
     Parameters
     -----------
-    scene_object : :class:`~.Scene`
+    scene_object
         The scene object.
 
-    camera_object : :class:`~.Camera`
+    camera_object
         The camera object used in the scene.
 
-    animations_list : Iterable[:class:`~.Animation`]
+    animations_list
         The list of animations.
 
-    current_mobjects_list : Iterable[:class:`~.Mobject`]
+    current_mobjects_list
         The list of mobjects.
 
     Returns

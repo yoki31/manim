@@ -1,4 +1,4 @@
-MacOS
+macOS
 =====
 
 For the sake of simplicity, the following instructions assume that you have
@@ -11,53 +11,23 @@ follow `Homebrew's installation instructions <https://docs.brew.sh/Installation>
 
 .. note::
 
-   For a while after Apple released its new ARM-based processors (the *"M1 chip"*),
+   For a while after Apple released its new ARM-based processors (the Apple Silicon chips like the *"M1 chip"*),
    the recommended way of installing Manim relied on *Rosetta*, Apple's compatibility
    layer between Intel and ARM architectures. This is no longer necessary, Manim can
    (and is recommended to) be installed natively.
 
 
-Required Dependencies
----------------------
+Installing Manim
+----------------
 
-To install all required dependencies for installing Manim (namely: ffmpeg, Python,
-and some required Python packages), run:
-
-.. code-block:: bash
-
-   brew install py3cairo ffmpeg
-
-On *Apple Silicon* based machines (i.e., devices with the M1 chip or similar; if
-you are unsure which processor you have check by opening the Apple menu, select
-*About This Mac* and check the entry next to *Chip*), some additional dependencies
-are required, namely:
+As of July/2024, brew can install Manim including all required dependencies.
+To install Manim:
 
 .. code-block:: bash
 
-   brew install cmake pango scipy
+   brew install manim
 
-After all required dependencies are installed, simply run:
-
-.. code-block:: bash
-
-   pip3 install manim
-
-to install Manim.
-
-.. note::
-
-   A frequent source for installation problems is if ``pip3``
-   does not point to the correct Python installation on your system.
-   To check this, run ``pip3 -V``: for MacOS Intel, the path should
-   start with ``/usr/local``, and for Apple Silicon with
-   ``/opt/homebrew``. If this is not the case, you either forgot
-   to modify your shell profile (``.zprofile``) during the installation
-   of Homebrew, or did not reload your shell (e.g., by opening a new
-   terminal) after doing so. It is also possible that some other
-   software (like Pycharm) changed the ``PATH`` variable – to fix this,
-   make sure that the Homebrew-related lines in your ``.zprofile`` are
-   at the very end of the file.
-
+.. _macos-optional-dependencies:
 
 Optional Dependencies
 ---------------------
@@ -66,14 +36,14 @@ In order to make use of Manim's interface to LaTeX for, e.g., rendering
 equations, LaTeX has to be installed as well. Note that this is an optional
 dependency: if you don't intend to use LaTeX, you don't have to install it.
 
-For MacOS, the recommended LaTeX distribution is
+For macOS, the recommended LaTeX distribution is
 `MacTeX <http://www.tug.org/mactex/>`__. You can install it by following
 the instructions from the link, or alternatively also via Homebrew by
 running:
 
 .. code-block:: bash
 
-   brew install --cask mactex
+   brew install --cask mactex-no-gui
 
 .. warning::
 

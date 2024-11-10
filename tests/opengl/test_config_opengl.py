@@ -1,12 +1,14 @@
+from __future__ import annotations
+
 import tempfile
 from pathlib import Path
 
 import numpy as np
 
-from manim import WHITE, Scene, Square, config, tempconfig
+from manim import WHITE, Scene, Square, tempconfig
 
 
-def test_tempconfig(using_opengl_renderer):
+def test_tempconfig(config, using_opengl_renderer):
     """Test the tempconfig context manager."""
     original = config.copy()
 
@@ -24,7 +26,7 @@ def test_tempconfig(using_opengl_renderer):
     # check that config is correctly restored
     for k, v in original.items():
         if isinstance(v, np.ndarray):
-            assert np.allclose(config[k], v)
+            np.testing.assert_allclose(config[k], v)
         else:
             assert config[k] == v
 
@@ -35,19 +37,20 @@ class MyScene(Scene):
         self.wait(1)
 
 
-def test_background_color(using_opengl_renderer):
+def test_background_color(config, using_opengl_renderer, dry_run):
     """Test the 'background_color' config option."""
-    with tempconfig({"background_color": WHITE, "verbosity": "ERROR", "dry_run": True}):
-        scene = MyScene()
-        scene.render()
-        frame = scene.renderer.get_frame()
-        assert np.allclose(frame[0, 0], [255, 255, 255, 255])
+    config.background_color = WHITE
+    config.verbose = "ERROR"
+
+    scene = MyScene()
+    scene.render()
+    frame = scene.renderer.get_frame()
+    np.testing.assert_allclose(frame[0, 0], [255, 255, 255, 255])
 
 
-def test_digest_file(using_opengl_renderer, tmp_path):
+def test_digest_file(config, using_opengl_renderer, tmp_path):
     """Test that a config file can be digested programmatically."""
-    with tempconfig({}):
-        tmp_cfg = tempfile.NamedTemporaryFile("w", dir=tmp_path, delete=False)
+    with tempfile.NamedTemporaryFile("w", dir=tmp_path, delete=False) as tmp_cfg:
         tmp_cfg.write(
             """
             [CLI]
@@ -56,38 +59,39 @@ def test_digest_file(using_opengl_renderer, tmp_path):
             frame_height = 10
             """,
         )
-        tmp_cfg.close()
-        config.digest_file(tmp_cfg.name)
+    config.digest_file(tmp_cfg.name)
 
-        assert config.get_dir("media_dir") == Path("this_is_my_favorite_path")
-        assert config.get_dir("video_dir") == Path("this_is_my_favorite_path/videos")
+    assert config.get_dir("media_dir") == Path("this_is_my_favorite_path")
+    assert config.get_dir("video_dir") == Path("this_is_my_favorite_path/videos")
 
 
-def test_frame_size(using_opengl_renderer, tmp_path):
+def test_frame_size(config, using_opengl_renderer, tmp_path):
     """Test that the frame size can be set via config file."""
-    assert np.allclose(config.aspect_ratio, config.pixel_width / config.pixel_height)
-    assert np.allclose(config.frame_height, 8.0)
+    np.testing.assert_allclose(
+        config.aspect_ratio, config.pixel_width / config.pixel_height
+    )
+    np.testing.assert_allclose(config.frame_height, 8.0)
 
     with tempconfig({}):
-        tmp_cfg = tempfile.NamedTemporaryFile("w", dir=tmp_path, delete=False)
-        tmp_cfg.write(
-            """
-            [CLI]
-            pixel_height = 10
-            pixel_width = 10
-            """,
-        )
-        tmp_cfg.close()
+        with tempfile.NamedTemporaryFile("w", dir=tmp_path, delete=False) as tmp_cfg:
+            tmp_cfg.write(
+                """
+                [CLI]
+                pixel_height = 10
+                pixel_width = 10
+                """,
+            )
         config.digest_file(tmp_cfg.name)
 
         # aspect ratio is set using pixel measurements
-        assert np.allclose(config.aspect_ratio, 1.0)
+        np.testing.assert_allclose(config.aspect_ratio, 1.0)
         # if not specified in the cfg file, frame_width is set using the aspect ratio
-        assert np.allclose(config.frame_height, 8.0)
-        assert np.allclose(config.frame_width, 8.0)
+        np.testing.assert_allclose(config.frame_height, 8.0)
+        np.testing.assert_allclose(config.frame_width, 8.0)
 
-    with tempconfig({}):
-        tmp_cfg = tempfile.NamedTemporaryFile("w", dir=tmp_path, delete=False)
+
+def test_frame_size_if_frame_width(config, using_opengl_renderer, tmp_path):
+    with tempfile.NamedTemporaryFile("w", dir=tmp_path, delete=False) as tmp_cfg:
         tmp_cfg.write(
             """
             [CLI]
@@ -97,16 +101,16 @@ def test_frame_size(using_opengl_renderer, tmp_path):
             frame_width = 10
             """,
         )
-        tmp_cfg.close()
-        config.digest_file(tmp_cfg.name)
+    tmp_cfg.close()
+    config.digest_file(tmp_cfg.name)
 
-        assert np.allclose(config.aspect_ratio, 1.0)
-        # if both are specified in the cfg file, the aspect ratio is ignored
-        assert np.allclose(config.frame_height, 10.0)
-        assert np.allclose(config.frame_width, 10.0)
+    np.testing.assert_allclose(config.aspect_ratio, 1.0)
+    # if both are specified in the cfg file, the aspect ratio is ignored
+    np.testing.assert_allclose(config.frame_height, 10.0)
+    np.testing.assert_allclose(config.frame_width, 10.0)
 
 
-def test_temporary_dry_run(using_opengl_renderer):
+def test_temporary_dry_run(config, using_opengl_renderer):
     """Test that tempconfig correctly restores after setting dry_run."""
     assert config["write_to_movie"]
     assert not config["save_last_frame"]
@@ -119,17 +123,20 @@ def test_temporary_dry_run(using_opengl_renderer):
     assert not config["save_last_frame"]
 
 
-def test_dry_run_with_png_format(using_opengl_renderer):
+def test_dry_run_with_png_format(config, using_opengl_renderer, dry_run):
     """Test that there are no exceptions when running a png without output"""
-    with tempconfig({"write_to_movie": False, "disable_caching": True}):
-        assert config["dry_run"] is True
-        scene = MyScene()
-        scene.render()
+    config.disable_caching = True
+    assert config["dry_run"] is True
+    scene = MyScene()
+    scene.render()
 
 
-def test_dry_run_with_png_format_skipped_animations(using_opengl_renderer):
+def test_dry_run_with_png_format_skipped_animations(
+    config, using_opengl_renderer, dry_run
+):
     """Test that there are no exceptions when running a png without output and skipped animations"""
-    with tempconfig({"write_to_movie": False, "disable_caching": True}):
-        assert config["dry_run"] is True
-        scene = MyScene(skip_animations=True)
-        scene.render()
+    config.write_to_movie = False
+    config.disable_caching = True
+    assert config["dry_run"] is True
+    scene = MyScene(skip_animations=True)
+    scene.render()

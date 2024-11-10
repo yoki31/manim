@@ -1,10 +1,12 @@
-import os
+from __future__ import annotations
+
+import logging
 import sys
 from pathlib import Path
 
 import pytest
 
-from manim import config, tempconfig
+import manim
 
 
 def pytest_addoption(parser):
@@ -44,6 +46,29 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(slow_skip)
 
 
+@pytest.fixture
+def manim_caplog(caplog):
+    logger = logging.getLogger("manim")
+    logger.propagate = True
+    caplog.set_level(logging.INFO, logger="manim")
+    yield caplog
+    logger.propagate = False
+
+
+@pytest.fixture
+def config():
+    saved = manim.config.copy()
+    # we need to return the actual config so that tests
+    # using tempconfig pass
+    yield manim.config
+    manim.config.update(saved)
+
+
+@pytest.fixture
+def dry_run(config):
+    config.dry_run = True
+
+
 @pytest.fixture(scope="session")
 def python_version():
     # use the same python executable as it is running currently
@@ -54,19 +79,17 @@ def python_version():
 
 @pytest.fixture
 def reset_cfg_file():
-    cfgfilepath = os.path.join(os.path.dirname(__file__), "test_cli", "manim.cfg")
-    with open(cfgfilepath) as cfgfile:
-        original = cfgfile.read()
+    cfgfilepath = Path(__file__).parent / "test_cli" / "manim.cfg"
+    original = cfgfilepath.read_text()
     yield
-    with open(cfgfilepath, "w") as cfgfile:
-        cfgfile.write(original)
+    cfgfilepath.write_text(original)
 
 
 @pytest.fixture
-def using_opengl_renderer():
+def using_opengl_renderer(config):
     """Standard fixture for running with opengl that makes tests use a standard_config.cfg with a temp dir."""
-    with tempconfig({"renderer": "opengl"}):
-        yield
+    config.renderer = "opengl"
+    yield
     # as a special case needed to manually revert back to cairo
     # due to side effects of setting the renderer
     config.renderer = "cairo"

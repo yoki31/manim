@@ -1,11 +1,29 @@
+from __future__ import annotations
+
 import math
 
 import numpy as np
 import pytest
 
-from manim import LEFT, ORIGIN, PI, UR, Axes, Circle, ComplexPlane
+from manim import (
+    LEFT,
+    ORIGIN,
+    PI,
+    UR,
+    Axes,
+    Circle,
+    ComplexPlane,
+    NumberPlane,
+    PolarPlane,
+    ThreeDAxes,
+    config,
+    tempconfig,
+)
 from manim import CoordinateSystem as CS
-from manim import NumberPlane, PolarPlane, ThreeDAxes, config, tempconfig
+from manim.utils.color import BLUE, GREEN, ORANGE, RED, YELLOW
+from manim.utils.testing.frames_comparison import frames_comparison
+
+__module_test__ = "coordinate_system_opengl"
 
 
 def test_initial_config(using_opengl_renderer):
@@ -19,8 +37,8 @@ def test_initial_config(using_opengl_renderer):
     assert cs.y_range[2] == 1.0
 
     ax = Axes()
-    assert np.allclose(ax.get_center(), ORIGIN)
-    assert np.allclose(ax.y_axis_config["label_direction"], LEFT)
+    np.testing.assert_allclose(ax.get_center(), ORIGIN)
+    np.testing.assert_allclose(ax.y_axis_config["label_direction"], LEFT)
 
     with tempconfig({"frame_x_radius": 100, "frame_y_radius": 200}):
         cs = CS()
@@ -41,7 +59,7 @@ def test_dimension(using_opengl_renderer):
 
 def test_abstract_base_class(using_opengl_renderer):
     """Check that CoordinateSystem has some abstract methods."""
-    with pytest.raises(Exception):
+    with pytest.raises(NotImplementedError):
         CS().get_axes()
 
 
@@ -67,7 +85,6 @@ def test_NumberPlane(using_opengl_renderer):
     ]
 
     for test_data in testing_data:
-
         x_range, y_range, x_vals, y_vals = test_data
 
         x_start, x_end = x_range
@@ -100,7 +117,7 @@ def test_point_to_coords(using_opengl_renderer):
 
     # get the coordinates of the circle with respect to the axes
     coords = np.around(ax.point_to_coords(circ.get_right()), decimals=4)
-    assert np.array_equal(coords, (7.0833, 2.6667))
+    np.testing.assert_array_equal(coords, (7.0833, 2.6667))
 
 
 def test_coords_to_point(using_opengl_renderer):
@@ -108,20 +125,50 @@ def test_coords_to_point(using_opengl_renderer):
 
     # a point with respect to the axes
     c2p_coord = np.around(ax.coords_to_point(2, 2), decimals=4)
-    assert np.array_equal(c2p_coord, (1.7143, 1.5, 0))
+    np.testing.assert_array_equal(c2p_coord, (1.7143, 1.5, 0))
 
 
 def test_input_to_graph_point(using_opengl_renderer):
     ax = Axes()
-    curve = ax.get_graph(lambda x: np.cos(x))
-    line_graph = ax.get_line_graph([1, 3, 5], [-1, 2, -2], add_vertex_dots=False)[
+    curve = ax.plot(lambda x: np.cos(x))
+    line_graph = ax.plot_line_graph([1, 3, 5], [-1, 2, -2], add_vertex_dots=False)[
         "line_graph"
     ]
 
     # move a square to PI on the cosine curve.
     position = np.around(ax.input_to_graph_point(x=PI, graph=curve), decimals=4)
-    assert np.array_equal(position, (2.6928, -0.75, 0))
+    np.testing.assert_array_equal(position, (2.6928, -0.75, 0))
 
     # test the line_graph implementation
     position = np.around(ax.input_to_graph_point(x=PI, graph=line_graph), decimals=4)
-    assert np.array_equal(position, (2.6928, 1.2876, 0))
+    np.testing.assert_array_equal(position, (2.6928, 1.2876, 0))
+
+
+@frames_comparison
+def test_gradient_line_graph_x_axis(scene, using_opengl_renderer):
+    """Test that using `colorscale` generates a line whose gradient matches the y-axis"""
+    axes = Axes(x_range=[-3, 3], y_range=[-3, 3])
+
+    curve = axes.plot(
+        lambda x: 0.1 * x**3,
+        x_range=(-3, 3, 0.001),
+        colorscale=[BLUE, GREEN, YELLOW, ORANGE, RED],
+        colorscale_axis=0,
+    )
+
+    scene.add(axes, curve)
+
+
+@frames_comparison
+def test_gradient_line_graph_y_axis(scene, using_opengl_renderer):
+    """Test that using `colorscale` generates a line whose gradient matches the y-axis"""
+    axes = Axes(x_range=[-3, 3], y_range=[-3, 3])
+
+    curve = axes.plot(
+        lambda x: 0.1 * x**3,
+        x_range=(-3, 3, 0.001),
+        colorscale=[BLUE, GREEN, YELLOW, ORANGE, RED],
+        colorscale_axis=1,
+    )
+
+    scene.add(axes, curve)

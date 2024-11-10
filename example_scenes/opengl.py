@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import manim.utils.opengl as opengl
@@ -295,8 +294,8 @@ class InlineShaderExample(Scene):
 
         shader = Shader(
             self.renderer.context,
-            source=dict(
-                vertex_shader="""
+            source={
+                "vertex_shader": """
                 #version 330
 
                 in vec4 in_vert;
@@ -312,7 +311,7 @@ class InlineShaderExample(Scene):
                     gl_Position = clip_space_vertex;
                 }
             """,
-                fragment_shader="""
+                "fragment_shader": """
             #version 330
 
             in vec4 v_color;
@@ -322,7 +321,7 @@ class InlineShaderExample(Scene):
               frag_color = v_color;
             }
             """,
-            ),
+            },
         )
         shader.set_uniform("u_model_view_matrix", opengl.view_matrix())
         shader.set_uniform(
@@ -369,7 +368,7 @@ class NamedShaderExample(Scene):
         shader = Shader(self.renderer.context, "manim_coords")
         shader.set_uniform("u_color", (0.0, 1.0, 0.0, 1.0))
 
-        view_matrix = self.camera.get_view_matrix()
+        view_matrix = self.camera.formatted_view_matrix
         shader.set_uniform("u_model_view_matrix", view_matrix)
         shader.set_uniform(
             "u_projection_matrix",
@@ -407,7 +406,7 @@ class InteractiveDevelopment(Scene):
         self.play(Create(square))
         self.wait()
 
-        # This opens an iPython termnial where you can keep writing
+        # This opens an iPython terminal where you can keep writing
         # lines as if they were part of this construct method.
         # In particular, 'square', 'circle' and 'self' will all be
         # part of the local namespace in that terminal.
@@ -462,7 +461,7 @@ class SurfaceExample(Scene):
         # in whatever you've set as the image directory in
         # the custom_config.yml file
 
-        script_location = Path(os.path.realpath(__file__)).parent
+        script_location = Path(__file__).resolve().parent
         day_texture = (
             script_location / "assets" / "1280px-Whole_world_-_land_and_oceans.jpg"
         )

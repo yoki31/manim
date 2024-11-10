@@ -18,63 +18,82 @@ jobs:
     env:
       DISPLAY: :0
       PYTEST_ADDOPTS: "--color=yes" # colors in pytest
-      GLCONTEXT_WIN_LIBGL: C:\msys64\mingw64\bin\opengl32.dll
+      PYTHONIOENCODING: "utf8"
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python: [3.7, 3.8, 3.9]
+        os: [ubuntu-22.04, macos-13, windows-latest]
+        python: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
       - name: Checkout the repository
-        uses: actions/checkout@v2
-
-      - name: Setup Python ${{ matrix.python }}
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python }}
+        uses: actions/checkout@v4
 
       - name: Install Poetry
         run: |
-          pip install wheel
-          curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python
+          pipx install "poetry==1.7.*"
+          poetry config virtualenvs.prefer-active-python true
+
+      - name: Setup Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: "poetry"
+
+      - name: Setup macOS PATH
+        if: runner.os == 'macOS'
+        run: |
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Setup cache variables
         shell: bash
         id: cache-vars
         run: |
-          export PATH="$HOME/.poetry/bin:$PATH"
-          echo "::set-output name=poetry-venv-dir::$(poetry config virtualenvs.path)"
-          echo "::set-output name=date::$(/bin/date -u "+%m%w%Y")"
-
-      - name: Setup Poetry cache
-        uses: actions/cache@v2
-        with:
-          path: ${{ steps.cache-vars.outputs.poetry-venv-dir }}
-          key: ${{ runner.os }}-poetry-${{ env.pythonLocation }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('poetry.lock') }}
-
-      - name: Install and cache ffmpeg (all OS)
-        uses: FedericoCarboni/setup-ffmpeg@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-        id: setup-ffmpeg
+          echo "date=$(/bin/date -u "+%m%w%Y")" >> $GITHUB_OUTPUT
 
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: python3-opengl libpango1.0-dev xvfb freeglut3-dev
+          version: 1.0
+
+      - name: Install Texlive (Linux)
+        if: runner.os == 'Linux'
+        uses: teatimeguest/setup-texlive-action@v3
+        with:
+          cache: true
+          packages: scheme-basic fontspec inputenc fontenc tipa mathrsfs calligra xcolor standalone preview doublestroke ms everysel setspace rsfs relsize ragged2e fundus-calligra microtype wasysym physics dvisvgm jknapltx wasy cm-super babel-english gnu-freefont mathastext cbfonts-fd xetex
+
+      - name: Start virtual display (Linux)
+        if: runner.os == 'Linux'
         run: |
-          sudo apt update
-          sudo apt-get -y install texlive texlive-latex-extra texlive-fonts-extra texlive-latex-recommended texlive-science texlive-fonts-extra tipa python-opengl libpango1.0-dev xvfb
-          echo "$HOME/.poetry/bin" >> $GITHUB_PATH
-          # start xvfb in the background
+          # start xvfb in background
           sudo /usr/bin/Xvfb $DISPLAY -screen 0 1280x1024x24 &
 
+      - name: Setup Cairo Cache
+        uses: actions/cache@v4
+        id: cache-cairo
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        with:
+          path: ${{ github.workspace }}/third_party
+          key: ${{ runner.os }}-dependencies-cairo-${{ hashFiles('.github/scripts/ci_build_cairo.py') }}
+
+      - name: Build and install Cairo (Linux and macOS)
+        if: (runner.os == 'Linux' || runner.os == 'macOS') && steps.cache-cairo.outputs.cache-hit != 'true'
+        run: python .github/scripts/ci_build_cairo.py
+
+      - name: Set env vars for Cairo (Linux and macOS)
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        run: python .github/scripts/ci_build_cairo.py --set-env-vars
+
       - name: Setup macOS cache
+        uses: actions/cache@v4
         id: cache-macos
         if: runner.os == 'macOS'
-        uses: actions/cache@v2
         with:
           path: ${{ github.workspace }}/macos-cache
-          key: ${{ runner.os }}-dependencies-tinytex-${{ hashFiles('.github/manimdependency.json') }}-${{ steps.cache-vars.outputs.date }}
+          key: ${{ runner.os }}-dependencies-tinytex-${{ hashFiles('.github/manimdependency.json') }}-${{ steps.cache-vars.outputs.date }}-1
 
       - name: Install system dependencies (MacOS)
         if: runner.os == 'macOS' && steps.cache-macos.outputs.cache-hit != 'true'
@@ -85,7 +104,7 @@ jobs:
           oriPath=$PATH
           sudo mkdir -p $PWD/macos-cache
           echo "Install TinyTeX"
-          sudo curl -L -o "/tmp/TinyTeX.tgz" "https://ci.appveyor.com/api/projects/yihui/tinytex/artifacts/TinyTeX.tgz?job=image:%20macOS"
+          sudo curl -L -o "/tmp/TinyTeX.tgz" "https://github.com/yihui/tinytex-releases/releases/download/daily/TinyTeX-1.tgz"
           sudo tar zxf "/tmp/TinyTeX.tgz" -C "$PWD/macos-cache"
           export PATH="$PWD/macos-cache/TinyTeX/bin/universal-darwin:$PATH"
           sudo tlmgr update --self
@@ -94,10 +113,6 @@ jobs:
           done
           export PATH="$oriPath"
           echo "Completed TinyTeX"
-
-      - name: Install cairo (MacOS)
-        if: runner.os == 'macOS'
-        run: brew install cairo
 
       - name: Add macOS dependencies to PATH
         if: runner.os == 'macOS'
@@ -110,20 +125,12 @@ jobs:
       - name: Setup Windows cache
         id: cache-windows
         if: runner.os == 'Windows'
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}\ManimCache
-          key: ${{ runner.os }}-dependencies-tinytex-${{ hashFiles('.github/manimdependency.json') }}-${{ steps.cache-vars.outputs.date }}
+          key: ${{ runner.os }}-dependencies-tinytex-${{ hashFiles('.github/manimdependency.json') }}-${{ steps.cache-vars.outputs.date }}-1
 
-      - name: Setup MSYS2 (Windows)
-        if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          release: false
-          msystem: MINGW64
-          path-type: inherit
-          install: >-
-            mingw-w64-x86_64-mesa
+      - uses: ssciwr/setup-mesa-dist-win@v2
 
       - name: Install system dependencies (Windows)
         if: runner.os == 'Windows' && steps.cache-windows.outputs.cache-hit != 'true'
@@ -131,9 +138,9 @@ jobs:
           $tinyTexPackages = $(python -c "import json;print(' '.join(json.load(open('.github/manimdependency.json'))['windows']['tinytex']))") -Split ' '
           $OriPath = $env:PATH
           echo "Install Tinytex"
-          Invoke-WebRequest "https://ci.appveyor.com/api/projects/yihui/tinytex/artifacts/TinyTeX.zip?job=image:%20Visual%20Studio%202019" -O "$($env:TMP)\TinyTex.zip"
+          Invoke-WebRequest "https://github.com/yihui/tinytex-releases/releases/download/daily/TinyTeX-1.zip" -OutFile "$($env:TMP)\TinyTex.zip"
           Expand-Archive -LiteralPath "$($env:TMP)\TinyTex.zip" -DestinationPath "$($PWD)\ManimCache\LatexWindows"
-          $env:Path = "$($PWD)\ManimCache\LatexWindows\TinyTeX\bin\win32;$($env:PATH)"
+          $env:Path = "$($PWD)\ManimCache\LatexWindows\TinyTeX\bin\windows;$($env:PATH)"
           tlmgr update --self
           foreach ($c in $tinyTexPackages){
             $c=$c.Trim()
@@ -145,26 +152,23 @@ jobs:
       - name: Add Windows dependencies to PATH
         if: runner.os == 'Windows'
         run: |
-          Remove-Item C:\msys64\mingw64\bin\python.exe -Force
-          Remove-Item C:\msys64\mingw64\bin\python3.exe -Force
-          $env:Path += ";" + "$($PWD)\ManimCache\LatexWindows\TinyTeX\bin\win32"
+          $env:Path += ";" + "$($PWD)\ManimCache\LatexWindows\TinyTeX\bin\windows"
           $env:Path = "$env:USERPROFILE\.poetry\bin;$($env:PATH)"
-          $env:PATH = "C:\msys64\mingw64\bin;$($env:PATH)"
           echo "$env:Path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Install manim
         run: |
-          poetry config experimental.new-installer false
-          poetry install -E webgl_renderer
+          poetry config installer.modern-installation false
+          poetry install
 
       - name: Run tests
-        run: poetry run pytest
+        run: |
+          poetry run python -m pytest
 
       - name: Run module doctests
-        run: poetry run pytest --cov-append --doctest-modules --ignore-glob="*opengl*" manim
+        run: |
+          poetry run python -m pytest -v --cov-append --ignore-glob="*opengl*" --doctest-modules manim
 
       - name: Run doctests in rst files
-        run: cd docs && pip install -r requirements.txt && poetry run make doctest O=-tskip-manim
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v1
+        run: |
+          cd docs && poetry run make doctest O=-tskip-manim

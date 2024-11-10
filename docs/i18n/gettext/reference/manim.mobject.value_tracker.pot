@@ -11,7 +11,7 @@ msgid "value\\_tracker"
 msgstr ""
 
 #: ../../../manim/mobject/value_tracker.py:docstring of manim.mobject.value_tracker:1
-msgid "Mobjects that dynamically show the change of a variable."
+msgid "Simple mobjects that can be used for storing (and updating) a value."
 msgstr ""
 
 #: ../../source/reference/manim.mobject.value_tracker.rst:15

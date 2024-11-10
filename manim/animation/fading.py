@@ -12,20 +12,19 @@
 
 """
 
+from __future__ import annotations
 
 __all__ = [
     "FadeOut",
     "FadeIn",
 ]
 
-from typing import Optional, Union
-
 import numpy as np
 
-from manim.mobject.opengl_mobject import OpenGLMobject
+from manim.mobject.opengl.opengl_mobject import OpenGLMobject
 
 from ..animation.transform import Transform
-from ..constants import DOWN, ORIGIN
+from ..constants import ORIGIN
 from ..mobject.mobject import Group, Mobject
 from ..scene.scene import Scene
 
@@ -51,17 +50,14 @@ class _Fade(Transform):
     def __init__(
         self,
         *mobjects: Mobject,
-        shift: Optional[np.ndarray] = None,
-        target_position: Optional[Union[np.ndarray, Mobject]] = None,
+        shift: np.ndarray | None = None,
+        target_position: np.ndarray | Mobject | None = None,
         scale: float = 1,
-        **kwargs
+        **kwargs,
     ) -> None:
         if not mobjects:
             raise ValueError("At least one mobject must be passed.")
-        if len(mobjects) == 1:
-            mobject = mobjects[0]
-        else:
-            mobject = Group(*mobjects)
+        mobject = mobjects[0] if len(mobjects) == 1 else Group(*mobjects)
 
         self.point_target = False
         if shift is None:
@@ -98,7 +94,7 @@ class _Fade(Transform):
 
 
 class FadeIn(_Fade):
-    """Fade in :class:`~.Mobject` s.
+    r"""Fade in :class:`~.Mobject` s.
 
     Parameters
     ----------
@@ -123,7 +119,7 @@ class FadeIn(_Fade):
                 dot = Dot(UP * 2 + LEFT)
                 self.add(dot)
                 tex = Tex(
-                    "FadeIn with ", "shift ", " or target\\_position", " and scale"
+                    "FadeIn with ", "shift ", r" or target\_position", " and scale"
                 ).scale(1)
                 animations = [
                     FadeIn(tex[0]),
@@ -135,6 +131,9 @@ class FadeIn(_Fade):
 
     """
 
+    def __init__(self, *mobjects: Mobject, **kwargs) -> None:
+        super().__init__(*mobjects, introducer=True, **kwargs)
+
     def create_target(self):
         return self.mobject
 
@@ -143,7 +142,7 @@ class FadeIn(_Fade):
 
 
 class FadeOut(_Fade):
-    """Fade out :class:`~.Mobject` s.
+    r"""Fade out :class:`~.Mobject` s.
 
     Parameters
     ----------

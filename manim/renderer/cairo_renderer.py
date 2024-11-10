@@ -1,4 +1,5 @@
-import time
+from __future__ import annotations
+
 import typing
 
 import numpy as np
@@ -12,42 +13,15 @@ from ..scene.scene_file_writer import SceneFileWriter
 from ..utils.exceptions import EndSceneEarlyException
 from ..utils.iterables import list_update
 
+if typing.TYPE_CHECKING:
+    import types
+    from collections.abc import Iterable
+    from typing import Any
 
-def handle_play_like_call(func):
-    """
-    This method is used internally to wrap the
-    passed function, into a function that
-    actually writes to the video stream.
-    Simultaneously, it also adds to the number
-    of animations played.
+    from manim.animation.animation import Animation
+    from manim.scene.scene import Scene
 
-    Parameters
-    ----------
-    func : function
-        The play() like function that has to be
-        written to the video file stream.
-
-    Returns
-    -------
-    function
-        The play() like function that can now write
-        to the video file stream.
-    """
-
-    # NOTE : This is only kept for OpenGL renderer.
-    # The play logic of the cairo renderer as been refactored and does not need this function anymore.
-    # When OpenGL renderer will have a proper testing system,
-    # the play logic of the latter has to be refactored in the same way the cairo renderer has been, and thus this
-    # method has to be deleted.
-
-    def wrapper(self, scene, *args, **kwargs):
-        self.animation_start_time = time.time()
-        self.file_writer.begin_animation(not self.skip_animations)
-        func(self, scene, *args, **kwargs)
-        self.file_writer.end_animation(not self.skip_animations)
-        self.num_plays += 1
-
-    return wrapper
+__all__ = ["CairoRenderer"]
 
 
 class CairoRenderer:
@@ -67,7 +41,6 @@ class CairoRenderer:
         # All of the following are set to EITHER the value passed via kwargs,
         # OR the value stored in the global config dict at the time of
         # _instance construction_.
-        self.file_writer = None
         self._file_writer_class = file_writer_class
         camera_cls = camera_class if camera_class is not None else Camera
         self.camera = camera_cls()
@@ -79,12 +52,17 @@ class CairoRenderer:
         self.static_image = None
 
     def init_scene(self, scene):
-        self.file_writer = self._file_writer_class(
+        self.file_writer: Any = self._file_writer_class(
             self,
             scene.__class__.__name__,
         )
 
-    def play(self, scene, *args, **kwargs):
+    def play(
+        self,
+        scene: Scene,
+        *args: Animation | Iterable[Animation] | types.GeneratorType[Animation],
+        **kwargs,
+    ):
         # Reset skip_animations to the original state.
         # Needed when rendering only some animations, and skipping others.
         self.skip_animations = self._original_skipping_status
@@ -95,6 +73,7 @@ class CairoRenderer:
         if self.skip_animations:
             logger.debug(f"Skipping animation {self.num_plays}")
             hash_current_animation = None
+            self.time += scene.duration
         else:
             if config["disable_caching"]:
                 logger.info("Caching disabled.")
@@ -112,6 +91,7 @@ class CairoRenderer:
                         {"hash_current_animation": hash_current_animation},
                     )
                     self.skip_animations = True
+                    self.time += scene.duration
         # adding None as a partial movie file will make file_writer ignore the latter.
         self.file_writer.add_partial_movie_file(hash_current_animation)
         self.animations_hashes.append(hash_current_animation)
@@ -120,13 +100,14 @@ class CairoRenderer:
             {"h": str(self.animations_hashes[:5])},
         )
 
-        # Save a static image, to avoid rendering non moving objects.
-        self.static_image = self.save_static_frame_data(scene, scene.static_mobjects)
-
         self.file_writer.begin_animation(not self.skip_animations)
         scene.begin_animations()
+
+        # Save a static image, to avoid rendering non moving objects.
+        self.save_static_frame_data(scene, scene.static_mobjects)
+
         if scene.is_current_animation_frozen_frame():
-            self.update_frame(scene)
+            self.update_frame(scene, mobjects=scene.moving_mobjects)
             # self.duration stands for the total run time of all the animations.
             # In this case, as there is only a wait, it will be the length of the wait.
             self.freeze_current_frame(scene.duration)
@@ -139,24 +120,23 @@ class CairoRenderer:
     def update_frame(  # TODO Description in Docstring
         self,
         scene,
-        mobjects=None,
-        include_submobjects=True,
-        ignore_skipping=True,
+        mobjects: typing.Iterable[Mobject] | None = None,
+        include_submobjects: bool = True,
+        ignore_skipping: bool = True,
         **kwargs,
     ):
         """Update the frame.
 
         Parameters
         ----------
-        mobjects: list, optional
+        scene
+
+        mobjects
             list of mobjects
 
-        background: np.ndarray, optional
-            Pixel Array for Background.
+        include_submobjects
 
-        include_submobjects: bool, optional
-
-        ignore_skipping : bool, optional
+        ignore_skipping
 
         **kwargs
 
@@ -192,30 +172,29 @@ class CairoRenderer:
         """
         return np.array(self.camera.pixel_array)
 
-    def add_frame(self, frame, num_frames=1):
+    def add_frame(self, frame: np.ndarray, num_frames: int = 1):
         """
         Adds a frame to the video_file_stream
 
         Parameters
         ----------
-        frame : numpy.ndarray
+        frame
             The frame to add, as a pixel array.
-        num_frames: int
+        num_frames
             The number of times to add frame.
         """
         dt = 1 / self.camera.frame_rate
-        self.time += num_frames * dt
         if self.skip_animations:
             return
-        for _ in range(num_frames):
-            self.file_writer.write_frame(frame)
+        self.time += num_frames * dt
+        self.file_writer.write_frame(frame, num_frames=num_frames)
 
     def freeze_current_frame(self, duration: float):
         """Adds a static frame to the movie for a given duration. The static frame is the current frame.
 
         Parameters
         ----------
-        duration : float
+        duration
             [description]
         """
         dt = 1 / self.camera.frame_rate
@@ -234,27 +213,27 @@ class CairoRenderer:
 
     def save_static_frame_data(
         self,
-        scene,
+        scene: Scene,
         static_mobjects: typing.Iterable[Mobject],
-    ) -> typing.Iterable[Mobject]:
-        """Compute and save the static frame, that will be reused at each frame to avoid to unecesseraly computer
-        static mobjects.
+    ) -> typing.Iterable[Mobject] | None:
+        """Compute and save the static frame, that will be reused at each frame
+        to avoid unnecessarily computing static mobjects.
 
         Parameters
         ----------
-        scene : Scene
+        scene
             The scene played.
-        static_mobjects : typing.Iterable[Mobject]
+        static_mobjects
             Static mobjects of the scene. If None, self.static_image is set to None
 
         Returns
         -------
         typing.Iterable[Mobject]
-            the static image computed.
+            The static image computed.
         """
+        self.static_image = None
         if not static_mobjects:
-            self.static_image = None
-            return
+            return None
         self.update_frame(scene, mobjects=static_mobjects)
         self.static_image = self.get_frame()
         return self.static_image
@@ -267,6 +246,9 @@ class CairoRenderer:
         the number of animations that need to be played, and
         raises an EndSceneEarlyException if they don't correspond.
         """
+        # there is always at least one section -> no out of bounds here
+        if self.file_writer.sections[-1].skip_animations:
+            self.skip_animations = True
         if config["save_last_frame"]:
             self.skip_animations = True
         if (
@@ -289,8 +271,10 @@ class CairoRenderer:
             config.save_last_frame = True
             config.write_to_movie = False
         else:
+            self.static_image = None
             self.update_frame(scene)
 
         if config["save_last_frame"]:
+            self.static_image = None
             self.update_frame(scene)
             self.file_writer.save_final_image(self.camera.get_image())

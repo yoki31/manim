@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from pathlib import Path
 
-from manim import BraceLabel, config
-from manim.mobject.opengl_mobject import OpenGLMobject
+from manim import BraceLabel
+from manim.mobject.opengl.opengl_mobject import OpenGLMobject
 
 
 def test_opengl_mobject_copy(using_opengl_renderer):
@@ -17,7 +19,7 @@ def test_opengl_mobject_copy(using_opengl_renderer):
         assert orig.submobjects[i] is not copy.submobjects[i]
 
 
-def test_bracelabel_copy(using_opengl_renderer, tmp_path):
+def test_bracelabel_copy(config, using_opengl_renderer, tmp_path):
     """Test that a copy is a deepcopy."""
     # For this test to work, we need to tweak some folders temporarily
     original_text_dir = config["text_dir"]

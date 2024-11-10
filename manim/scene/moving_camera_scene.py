@@ -53,7 +53,7 @@ Examples
             self.camera.frame.save_state()
 
             ax = Axes(x_range=[-1, 10], y_range=[-1, 10])
-            graph = ax.get_graph(lambda x: np.sin(x), color=WHITE, x_range=[0, 3 * PI])
+            graph = ax.plot(lambda x: np.sin(x), color=WHITE, x_range=[0, 3 * PI])
 
             dot_1 = Dot(ax.i2gp(graph.t_min, graph))
             dot_2 = Dot(ax.i2gp(graph.t_max, graph))
@@ -64,9 +64,32 @@ Examples
             self.play(Restore(self.camera.frame))
             self.wait()
 
+.. manim:: SlidingMultipleScenes
+
+    class SlidingMultipleScenes(MovingCameraScene):
+        def construct(self):
+            def create_scene(number):
+                frame = Rectangle(width=16,height=9)
+                circ = Circle().shift(LEFT)
+                text = Tex(f"This is Scene {str(number)}").next_to(circ, RIGHT)
+                frame.add(circ,text)
+                return frame
+
+            group = VGroup(*(create_scene(i) for i in range(4))).arrange_in_grid(buff=4)
+            self.add(group)
+            self.camera.auto_zoom(group[0], animate=False)
+            for scene in group:
+                self.play(self.camera.auto_zoom(scene))
+                self.wait()
+
+            self.play(self.camera.auto_zoom(group, margin=2))
 """
 
+from __future__ import annotations
+
 __all__ = ["MovingCameraScene"]
+
+from manim.animation.animation import Animation
 
 from ..camera.moving_camera import MovingCamera
 from ..scene.scene import Scene
@@ -79,22 +102,26 @@ class MovingCameraScene(Scene):
     This is a Scene, with special configurations and properties that
     make it suitable for cases where the camera must be moved around.
 
+    Note: Examples are included in the moving_camera_scene module
+    documentation, see below in the 'see also' section.
+
     .. SEEALSO::
 
+        :mod:`.moving_camera_scene`
         :class:`.MovingCamera`
     """
 
     def __init__(self, camera_class=MovingCamera, **kwargs):
         super().__init__(camera_class=camera_class, **kwargs)
 
-    def get_moving_mobjects(self, *animations):
+    def get_moving_mobjects(self, *animations: Animation):
         """
         This method returns a list of all of the Mobjects in the Scene that
         are moving, that are also in the animations passed.
 
         Parameters
         ----------
-        *animations : Animation
+        *animations
             The Animations whose mobjects will be checked.
         """
         moving_mobjects = super().get_moving_mobjects(*animations)

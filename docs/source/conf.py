@@ -4,18 +4,21 @@
 # list see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
-# -- Path setup --------------------------------------------------------------
+from __future__ import annotations
 
+import os
+import sys
+from datetime import datetime
+from pathlib import Path
+
+import manim
+from manim.utils.docbuild.module_parsing import parse_module_attributes
+
+# -- Path setup --------------------------------------------------------------
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
-import os
-import sys
-from distutils.sysconfig import get_python_lib
-from pathlib import Path
-
-import manim
 
 sys.path.insert(0, os.path.abspath("."))
 
@@ -23,7 +26,7 @@ sys.path.insert(0, os.path.abspath("."))
 # -- Project information -----------------------------------------------------
 
 project = "Manim"
-copyright = "2020-2021, The Manim Community Dev Team"
+copyright = f"2020-{datetime.now().year}, The Manim Community Dev Team"  # noqa: A001
 author = "The Manim Community Dev Team"
 
 
@@ -34,7 +37,6 @@ author = "The Manim Community Dev Team"
 # ones.
 extensions = [
     "sphinx.ext.autodoc",
-    "recommonmark",
     "sphinx_copybutton",
     "sphinx.ext.napoleon",
     "sphinx.ext.autosummary",
@@ -42,16 +44,27 @@ extensions = [
     "sphinx.ext.extlinks",
     "sphinx.ext.viewcode",
     "sphinxext.opengraph",
-    "manim_directive",
+    "manim.utils.docbuild.manim_directive",
+    "manim.utils.docbuild.autocolor_directive",
+    "manim.utils.docbuild.autoaliasattr_directive",
     "sphinx.ext.graphviz",
     "sphinx.ext.inheritance_diagram",
+    "sphinxcontrib.programoutput",
+    "myst_parser",
 ]
 
 # Automatically generate stub pages when using the .. autosummary directive
 autosummary_generate = True
 
 # generate documentation from type hints
+ALIAS_DOCS_DICT = parse_module_attributes()[0]
 autodoc_typehints = "description"
+autodoc_type_aliases = {
+    alias_name: f"~manim.{module}.{alias_name}"
+    for module, module_dict in ALIAS_DOCS_DICT.items()
+    for category_dict in module_dict.values()
+    for alias_name in category_dict
+}
 autoclass_content = "both"
 
 # controls whether functions documented by the autofunction directive
@@ -69,7 +82,7 @@ napoleon_custom_sections = ["Tests", ("Test", "Tests")]
 # This pattern also affects html_static_path and html_extra_path.
 html_extra_path = ["robots.txt"]
 
-exclude_patterns = []
+exclude_patterns: list[str] = []
 
 # -- Options for internationalization ----------------------------------------
 # Set the destination directory of the localized po files
@@ -97,6 +110,10 @@ html_favicon = str(Path("_static/favicon.ico"))
 html_static_path = ["_static"]
 
 html_theme_options = {
+    "source_repository": "https://github.com/ManimCommunity/manim/",
+    "source_branch": "main",
+    "source_directory": "docs/source/",
+    "top_of_page_button": None,
     "light_logo": "manim-logo-sidebar.svg",
     "dark_logo": "manim-logo-sidebar-dark.svg",
     "light_css_variables": {
@@ -132,39 +149,39 @@ html_css_files = ["custom.css"]
 
 # external links
 extlinks = {
-    "issue": ("https://github.com/ManimCommunity/manim/issues/%s", "issue "),
-    "pr": ("https://github.com/ManimCommunity/manim/pull/%s", "pull request "),
+    "issue": ("https://github.com/ManimCommunity/manim/issues/%s", "#%s"),
+    "pr": ("https://github.com/ManimCommunity/manim/pull/%s", "#%s"),
 }
 
 # opengraph settings
-ogp_image = "https://www.manim.community/logo.png"
 ogp_site_name = "Manim Community | Documentation"
 ogp_site_url = "https://docs.manim.community/"
+ogp_social_cards = {
+    "image": "_static/logo.png",
+}
 
 
 # inheritance_graph settings
-inheritance_graph_attrs = dict(
-    concentrate=True,
-    size='""',
-    splines="ortho",
-    nodesep=0.1,
-    ranksep=0.2,
-)
+inheritance_graph_attrs = {
+    "concentrate": True,
+    "size": '""',
+    "splines": "ortho",
+    "nodesep": 0.1,
+    "ranksep": 0.2,
+}
 
-inheritance_node_attrs = dict(
-    penwidth=0,
-    shape="box",
-    width=0.05,
-    height=0.05,
-    margin=0.05,
-)
+inheritance_node_attrs = {
+    "penwidth": 0,
+    "shape": "box",
+    "width": 0.05,
+    "height": 0.05,
+    "margin": 0.05,
+}
 
-inheritance_edge_attrs = dict(
-    penwidth=1,
-)
+inheritance_edge_attrs = {
+    "penwidth": 1,
+}
 
-html_js_files = [
-    "responsiveSvg.js",
-]
+html_js_files = ["responsiveSvg.js"]
 
 graphviz_output_format = "svg"

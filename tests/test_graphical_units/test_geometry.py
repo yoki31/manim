@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from manim import *
-from tests.test_graphical_units.testing.frames_comparison import frames_comparison
+from manim.utils.testing.frames_comparison import frames_comparison
 
 __module_test__ = "geometry"
 
@@ -59,7 +61,7 @@ def test_Dot(scene):
 
 @frames_comparison
 def test_DashedVMobject(scene):
-    circle = DashedVMobject(Circle(), 12, 0.9)
+    circle = DashedVMobject(Circle(), 12, 0.9, dash_offset=0.1)
     line = DashedLine(dash_length=0.5)
     scene.add(circle, line)
 
@@ -167,6 +169,35 @@ def test_Angle(scene):
 
 
 @frames_comparison
+def test_three_points_Angle(scene):
+    # acute angle
+    acute = Angle.from_three_points(
+        np.array([10, 0, 0]), np.array([0, 0, 0]), np.array([10, 10, 0])
+    )
+    # obtuse angle
+    obtuse = Angle.from_three_points(
+        np.array([-10, 1, 0]), np.array([0, 0, 0]), np.array([10, 1, 0])
+    )
+    # quadrant 1 angle
+    q1 = Angle.from_three_points(
+        np.array([10, 10, 0]), np.array([0, 0, 0]), np.array([10, 1, 0])
+    )
+    # quadrant 2 angle
+    q2 = Angle.from_three_points(
+        np.array([-10, 1, 0]), np.array([0, 0, 0]), np.array([-1, 10, 0])
+    )
+    # quadrant 3 angle
+    q3 = Angle.from_three_points(
+        np.array([-10, -1, 0]), np.array([0, 0, 0]), np.array([-1, -10, 0])
+    )
+    # quadrant 4 angle
+    q4 = Angle.from_three_points(
+        np.array([10, -1, 0]), np.array([0, 0, 0]), np.array([1, -10, 0])
+    )
+    scene.add(VGroup(acute, obtuse, q1, q2, q3, q4).arrange(RIGHT))
+
+
+@frames_comparison
 def test_RightAngle(scene):
     l1 = Line(ORIGIN, RIGHT)
     l2 = Line(ORIGIN, UP)
@@ -216,3 +247,25 @@ def test_CurvedArrowCustomTip(scene):
         tip_shape_end=ArrowSquareFilledTip,
     )
     scene.add(arrow, double_arrow)
+
+
+@frames_comparison
+def test_LabeledLine(scene):
+    line = LabeledLine(
+        label="0.5",
+        label_position=0.8,
+        font_size=20,
+        label_color=WHITE,
+        label_frame=True,
+        start=LEFT + DOWN,
+        end=RIGHT + UP,
+    )
+    scene.add(line)
+
+
+@frames_comparison
+def test_LabeledArrow(scene):
+    l_arrow = LabeledArrow(
+        "0.5", start=LEFT * 3, end=RIGHT * 3 + UP * 2, label_position=0.5, font_size=15
+    )
+    scene.add(l_arrow)

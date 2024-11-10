@@ -1,8 +1,12 @@
+from __future__ import annotations
+
 import numpy as np
 import pytest
 
 from manim.animation.creation import Uncreate
-from manim.mobject.geometry import Dot, Line, Square
+from manim.mobject.geometry.arc import Dot
+from manim.mobject.geometry.line import Line
+from manim.mobject.geometry.polygram import Square
 from manim.mobject.mobject import override_animate
 from manim.mobject.types.vectorized_mobject import VGroup
 
@@ -19,10 +23,8 @@ def test_chained_animate(using_opengl_renderer):
     scale_factor = 2
     direction = np.array((1, 1, 0))
     anim = s.animate.scale(scale_factor).shift(direction).build()
-    assert (
-        anim.mobject.target.width == scale_factor * s.width
-        and (anim.mobject.target.get_center() == direction).all()
-    )
+    assert anim.mobject.target.width == scale_factor * s.width
+    assert (anim.mobject.target.get_center() == direction).all()
 
 
 def test_overridden_animate(using_opengl_renderer):
@@ -99,10 +101,8 @@ def test_chained_animate_with_args(using_opengl_renderer):
     run_time = 2
 
     anim = s.animate(run_time=run_time).scale(scale_factor).shift(direction).build()
-    assert (
-        anim.mobject.target.width == scale_factor * s.width
-        and (anim.mobject.target.get_center() == direction).all()
-    )
+    assert anim.mobject.target.width == scale_factor * s.width
+    assert (anim.mobject.target.get_center() == direction).all()
     assert anim.run_time == run_time
 
 

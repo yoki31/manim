@@ -1,5 +1,7 @@
 """Mobjects representing vector fields."""
 
+from __future__ import annotations
+
 __all__ = [
     "VectorField",
     "ArrowVectorField",
@@ -8,28 +10,38 @@ __all__ = [
 
 import itertools as it
 import random
+from collections.abc import Iterable, Sequence
 from math import ceil, floor
-from typing import Callable, Iterable, Optional, Sequence, Tuple, Type
+from typing import Callable
 
 import numpy as np
-from colour import Color
 from PIL import Image
+
+from manim.animation.updaters.update import UpdateFromAlphaFunc
+from manim.mobject.geometry.line import Vector
+from manim.mobject.graphing.coordinate_systems import CoordinateSystem
 
 from .. import config
 from ..animation.composition import AnimationGroup, Succession
 from ..animation.creation import Create
 from ..animation.indication import ShowPassingFlash
-from ..animation.update import UpdateFromAlphaFunc
-from ..constants import OUT, RIGHT, UP
-from ..mobject.geometry import Vector
+from ..constants import OUT, RIGHT, UP, RendererType
 from ..mobject.mobject import Mobject
-from ..mobject.types.vectorized_mobject import VGroup, VMobject
+from ..mobject.types.vectorized_mobject import VGroup
+from ..mobject.utils import get_vectorized_mobject_class
 from ..utils.bezier import interpolate, inverse_interpolate
-from ..utils.color import BLUE_E, GREEN, RED, YELLOW, color_to_rgb, rgb_to_color
-from ..utils.deprecation import deprecated_params
+from ..utils.color import (
+    BLUE_E,
+    GREEN,
+    RED,
+    YELLOW,
+    ManimColor,
+    ParsableManimColor,
+    color_to_rgb,
+    rgb_to_color,
+)
 from ..utils.rate_functions import ease_out_sine, linear
 from ..utils.simple_functions import sigmoid
-from .types.opengl_vectorized_mobject import OpenGLVMobject
 
 DEFAULT_SCALAR_FIELD_COLORS: list = [BLUE_E, GREEN, YELLOW, RED]
 
@@ -55,7 +67,7 @@ class VectorField(VGroup):
         The value of the color_scheme function to be mapped to the last color in `colors`. Higher values also result in the last color of the gradient.
     colors
         The colors defining the color gradient of the vector field.
-    kwargs : Any
+    kwargs
         Additional arguments to be passed to the :class:`~.VGroup` constructor
 
     """
@@ -63,12 +75,12 @@ class VectorField(VGroup):
     def __init__(
         self,
         func: Callable[[np.ndarray], np.ndarray],
-        color: Optional[Color] = None,
-        color_scheme: Optional[Callable[[np.ndarray], float]] = None,
+        color: ParsableManimColor | None = None,
+        color_scheme: Callable[[np.ndarray], float] | None = None,
         min_color_scheme_value: float = 0,
         max_color_scheme_value: float = 2,
-        colors: Sequence[Color] = DEFAULT_SCALAR_FIELD_COLORS,
-        **kwargs
+        colors: Sequence[ParsableManimColor] = DEFAULT_SCALAR_FIELD_COLORS,
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.func = func
@@ -82,7 +94,7 @@ class VectorField(VGroup):
             self.color_scheme = color_scheme  # TODO maybe other default for direction?
             self.rgbs = np.array(list(map(color_to_rgb, colors)))
 
-            def pos_to_rgb(pos: np.ndarray) -> Tuple[float, float, float, float]:
+            def pos_to_rgb(pos: np.ndarray) -> tuple[float, float, float, float]:
                 vec = self.func(pos)
                 color_value = np.clip(
                     self.color_scheme(vec),
@@ -104,7 +116,7 @@ class VectorField(VGroup):
             self.pos_to_color = lambda pos: rgb_to_color(self.pos_to_rgb(pos))
         else:
             self.single_color = True
-            self.color = color
+            self.color = ManimColor.parse(color)
         self.submob_movement_updater = None
 
     @staticmethod
@@ -140,7 +152,7 @@ class VectorField(VGroup):
         ----------
         func
             The function defining a vector field.
-        shift_vector
+        scalar
             The scalar to be applied to the vector field.
 
         Examples
@@ -166,13 +178,29 @@ class VectorField(VGroup):
         """
         return lambda p: func(p * scalar)
 
+    def fit_to_coordinate_system(self, coordinate_system: CoordinateSystem):
+        """Scale the vector field to fit a coordinate system.
+
+        This method is useful when the vector field is defined in a coordinate system
+        different from the one used to display the vector field.
+
+        This method can only be used once because it transforms the origin of each vector.
+
+        Parameters
+        ----------
+        coordinate_system
+            The coordinate system to fit the vector field to.
+
+        """
+        self.apply_function(lambda pos: coordinate_system.coords_to_point(*pos))
+
     def nudge(
         self,
         mob: Mobject,
         dt: float = 1,
         substeps: int = 1,
         pointwise: bool = False,
-    ) -> "VectorField":
+    ) -> VectorField:
         """Nudge a :class:`~.Mobject` along the vector field.
 
         Parameters
@@ -256,7 +284,7 @@ class VectorField(VGroup):
         dt: float = 1,
         substeps: int = 1,
         pointwise: bool = False,
-    ) -> "VectorField":
+    ) -> VectorField:
         """Apply a nudge along the vector field to all submobjects.
 
         Parameters
@@ -307,7 +335,7 @@ class VectorField(VGroup):
         self,
         speed: float = 1,
         pointwise: bool = False,
-    ) -> "VectorField":
+    ) -> VectorField:
         """Start continuously moving all submobjects along the vector field.
 
         Calling this method multiple times will result in removing the previous updater created by this method.
@@ -325,7 +353,6 @@ class VectorField(VGroup):
             This vector field.
 
         """
-
         self.stop_submobject_movement()
         self.submob_movement_updater = lambda mob, dt: mob.nudge_submobjects(
             dt * speed,
@@ -334,7 +361,7 @@ class VectorField(VGroup):
         self.add_updater(self.submob_movement_updater)
         return self
 
-    def stop_submobject_movement(self) -> "VectorField":
+    def stop_submobject_movement(self) -> VectorField:
         """Stops the continuous movement started using :meth:`start_submobject_movement`.
 
         Returns
@@ -390,7 +417,7 @@ class VectorField(VGroup):
         self,
         start: float,
         end: float,
-        colors: Iterable,
+        colors: Iterable[ParsableManimColor],
     ):
         """
         Generates a gradient of rgbas as a numpy array
@@ -467,7 +494,7 @@ class ArrowVectorField(VectorField):
         The opacity of the arrows.
     vector_config
         Additional arguments to be passed to the :class:`~.Vector` constructor
-    kwargs : Any
+    kwargs
         Additional arguments to be passed to the :class:`~.VGroup` constructor
 
     Examples
@@ -511,20 +538,14 @@ class ArrowVectorField(VectorField):
 
     """
 
-    @deprecated_params(
-        params="x_min, x_max, delta_x, y_min, y_max, delta_y",
-        since="v0.10.0",
-        until="v0.11.0",
-        message="Please use x_range and y_range instead.",
-    )
     def __init__(
         self,
         func: Callable[[np.ndarray], np.ndarray],
-        color: Optional[Color] = None,
-        color_scheme: Optional[Callable[[np.ndarray], float]] = None,
+        color: ParsableManimColor | None = None,
+        color_scheme: Callable[[np.ndarray], float] | None = None,
         min_color_scheme_value: float = 0,
         max_color_scheme_value: float = 2,
-        colors: Sequence[Color] = DEFAULT_SCALAR_FIELD_COLORS,
+        colors: Sequence[ParsableManimColor] = DEFAULT_SCALAR_FIELD_COLORS,
         # Determining Vector positions:
         x_range: Sequence[float] = None,
         y_range: Sequence[float] = None,
@@ -533,16 +554,16 @@ class ArrowVectorField(VectorField):
         # Takes in actual norm, spits out displayed norm
         length_func: Callable[[float], float] = lambda norm: 0.45 * sigmoid(norm),
         opacity: float = 1.0,
-        vector_config: Optional[dict] = None,
-        **kwargs
+        vector_config: dict | None = None,
+        **kwargs,
     ):
         self.x_range = x_range or [
-            kwargs.pop("x_min", None) or floor(-config["frame_width"] / 2),
-            kwargs.pop("x_max", None) or ceil(config["frame_width"] / 2),
+            floor(-config["frame_width"] / 2),
+            ceil(config["frame_width"] / 2),
         ]
         self.y_range = y_range or [
-            kwargs.pop("y_min", None) or floor(-config["frame_height"] / 2),
-            kwargs.pop("y_max", None) or ceil(config["frame_height"] / 2),
+            floor(-config["frame_height"] / 2),
+            ceil(config["frame_height"] / 2),
         ]
         self.ranges = [self.x_range, self.y_range]
 
@@ -556,13 +577,6 @@ class ArrowVectorField(VectorField):
             if len(self.ranges[i]) == 2:
                 self.ranges[i] += [0.5]
             self.ranges[i][1] += self.ranges[i][2]
-
-        if "delta_x" in kwargs:
-            self.ranges[0][2] = kwargs.pop("delta_x")
-            self.ranges[0][1] += self.ranges[0][2] - 0.5
-        if "delta_y" in kwargs:
-            self.ranges[1][2] = kwargs.pop("delta_y")
-            self.ranges[1][1] += self.ranges[1][2] - 0.5
 
         self.x_range, self.y_range, self.z_range = self.ranges
 
@@ -586,8 +600,12 @@ class ArrowVectorField(VectorField):
         x_range = np.arange(*self.x_range)
         y_range = np.arange(*self.y_range)
         z_range = np.arange(*self.z_range)
-        for x, y, z in it.product(x_range, y_range, z_range):
-            self.add(self.get_vector(x * RIGHT + y * UP + z * OUT))
+        self.add(
+            *[
+                self.get_vector(x * RIGHT + y * UP + z * OUT)
+                for x, y, z in it.product(x_range, y_range, z_range)
+            ]
+        )
         self.set_opacity(self.opacity)
 
     def get_vector(self, point: np.ndarray):
@@ -601,8 +619,6 @@ class ArrowVectorField(VectorField):
         ----------
         point
             The root point of the vector.
-        kwargs : Any
-            Additional arguments to be passed to the :class:`~.Vector` constructor
 
         """
         output = np.array(self.func(point))
@@ -696,26 +712,20 @@ class StreamLines(VectorField):
 
     """
 
-    @deprecated_params(
-        params="x_min, x_max, delta_x, y_min, y_max, delta_y",
-        since="v0.10.0",
-        until="v0.11.0",
-        message="Please use x_range and y_range instead.",
-    )
     def __init__(
         self,
         func: Callable[[np.ndarray], np.ndarray],
-        color: Optional[Color] = None,
-        color_scheme: Optional[Callable[[np.ndarray], float]] = None,
+        color: ParsableManimColor | None = None,
+        color_scheme: Callable[[np.ndarray], float] | None = None,
         min_color_scheme_value: float = 0,
         max_color_scheme_value: float = 2,
-        colors: Sequence[Color] = DEFAULT_SCALAR_FIELD_COLORS,
+        colors: Sequence[ParsableManimColor] = DEFAULT_SCALAR_FIELD_COLORS,
         # Determining stream line starting positions:
         x_range: Sequence[float] = None,
         y_range: Sequence[float] = None,
         z_range: Sequence[float] = None,
         three_dimensions: bool = False,
-        noise_factor: Optional[float] = None,
+        noise_factor: float | None = None,
         n_repeats=1,
         # Determining how lines are drawn
         dt=0.05,
@@ -725,15 +735,15 @@ class StreamLines(VectorField):
         # Determining stream line appearance:
         stroke_width=1,
         opacity=1,
-        **kwargs
+        **kwargs,
     ):
         self.x_range = x_range or [
-            kwargs.pop("x_min", None) or floor(-config["frame_width"] / 2),
-            kwargs.pop("x_max", None) or ceil(config["frame_width"] / 2),
+            floor(-config["frame_width"] / 2),
+            ceil(config["frame_width"] / 2),
         ]
         self.y_range = y_range or [
-            kwargs.pop("y_min", None) or floor(-config["frame_height"] / 2),
-            kwargs.pop("y_max", None) or ceil(config["frame_height"] / 2),
+            floor(-config["frame_height"] / 2),
+            ceil(config["frame_height"] / 2),
         ]
         self.ranges = [self.x_range, self.y_range]
 
@@ -747,13 +757,6 @@ class StreamLines(VectorField):
             if len(self.ranges[i]) == 2:
                 self.ranges[i] += [0.5]
             self.ranges[i][1] += self.ranges[i][2]
-
-        if "delta_x" in kwargs:
-            self.ranges[0][2] = kwargs.pop("delta_x")
-            self.ranges[0][1] += self.ranges[0][2] - 0.5
-        if "delta_y" in kwargs:
-            self.ranges[1][2] = kwargs.pop("delta_y")
-            self.ranges[1][1] += self.ranges[1][2] - 0.5
 
         self.x_range, self.y_range, self.z_range = self.ranges
 
@@ -804,7 +807,7 @@ class StreamLines(VectorField):
         max_steps = ceil(virtual_time / dt) + 1
         if not self.single_color:
             self.background_img = self.get_colored_background_image()
-            if config["renderer"] == "opengl":
+            if config["renderer"] == RendererType.OPENGL:
                 self.values_to_rgbas = self.get_vectorized_rgba_gradient_function(
                     min_color_scheme_value,
                     max_color_scheme_value,
@@ -821,17 +824,16 @@ class StreamLines(VectorField):
             step = max_steps
             if not step:
                 continue
-            if config["renderer"] == "opengl":
-                line = OpenGLVMobject()
-            else:
-                line = VMobject()
+            line = get_vectorized_mobject_class()()
             line.duration = step * dt
             step = max(1, int(len(points) / self.max_anchors_per_line))
             line.set_points_smoothly(points[::step])
             if self.single_color:
-                line.set_stroke(self.color)
+                line.set_stroke(
+                    color=self.color, width=self.stroke_width, opacity=opacity
+                )
             else:
-                if config["renderer"] == "opengl":
+                if config.renderer == RendererType.OPENGL:
                     # scaled for compatibility with cairo
                     line.set_stroke(width=self.stroke_width / 4.0)
                     norms = np.array(
@@ -854,9 +856,9 @@ class StreamLines(VectorField):
 
     def create(
         self,
-        lag_ratio: Optional[float] = None,
-        run_time: Optional[Callable[[float], float]] = None,
-        **kwargs
+        lag_ratio: float | None = None,
+        run_time: Callable[[float], float] | None = None,
+        **kwargs,
     ) -> AnimationGroup:
         """The creation animation of the stream lines.
 
@@ -910,12 +912,12 @@ class StreamLines(VectorField):
 
     def start_animation(
         self,
-        warm_up=True,
+        warm_up: bool = True,
         flow_speed: float = 1,
         time_width: float = 0.3,
         rate_func: Callable[[float], float] = linear,
-        line_animation_class: Type[ShowPassingFlash] = ShowPassingFlash,
-        **kwargs
+        line_animation_class: type[ShowPassingFlash] = ShowPassingFlash,
+        **kwargs,
     ) -> None:
         """Animates the stream lines using an updater.
 
@@ -923,7 +925,7 @@ class StreamLines(VectorField):
 
         Parameters
         ----------
-        warm_up : bool, optional
+        warm_up
             If `True` the animation is initialized line by line. Otherwise it starts with all lines shown.
         flow_speed
             At `flow_speed=1` the distance the flow moves per second is equal to the magnitude of the vector field along its path. The speed value scales the speed of this flow.
@@ -948,7 +950,6 @@ class StreamLines(VectorField):
                     self.wait(stream_lines.virtual_time / stream_lines.flow_speed)
 
         """
-
         for line in self.stream_lines:
             run_time = line.duration / flow_speed
             line.anim = line_animation_class(
@@ -1008,7 +1009,6 @@ class StreamLines(VectorField):
                     self.play(stream_lines.end_animation())
 
         """
-
         if self.flow_animation is None:
             raise ValueError("You have to start the animation before fading it out.")
 

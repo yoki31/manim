@@ -5,6 +5,24 @@ If you are adding new features to manim, you should add appropriate tests for th
 manim from breaking at each change by checking that no other
 feature has been broken and/or been unintentionally modified.
 
+.. warning::
+
+   The full tests suite requires Cairo 1.18 in order to run all tests.
+   However, Cairo 1.18 may not be available from your package manager,
+   like ``apt``, and it is very likely that you have an older version installed,
+   e.g., 1.16. If you run tests with a version prior to 1.18,
+   many tests will be skipped. Those tests are not skipped in the online CI.
+
+   If you want to run all tests locally, you need to install Cairo 1.18 or above.
+   You can do so by compiling Cairo from source:
+
+   1. download ``cairo-1.18.0.tar.xz`` from
+      `here <https://www.cairographics.org/releases/>`_.
+      and uncompress it;
+   2. open the INSTALL file and follow the instructions (you might need to install
+      ``meson`` and ``ninja``);
+   3. run the tests suite and verify that the Cairo version is correct.
+
 How Manim tests
 ---------------
 
@@ -36,8 +54,8 @@ At the moment there are three types of tests:
 #. Graphical unit tests:
    Because ``manim`` is a graphics library, we test frames. To do so, we create test scenes that render a specific feature.
    When pytest runs, it compares the result of the test to the control data, either at 6 fps or just the last frame. If it matches, the tests
-   pass. If the test and control data differ, the tests fail. You can
-   use ``--show_diff`` flag with ``pytest`` to visually see the differences.
+   pass. If the test and control data differ, the tests fail. You can use ``--show_diff`` flag with ``pytest`` to visually
+   see the differences. The ``extract_frames.py`` script lets you see all the frames of a test.
 
 #. Videos format tests:
 
@@ -112,7 +130,6 @@ The ``manim/tests`` directory looks like this:
     │   └── test_cli_flags.py
     └── utils
         ├── commands.py
-        ├── GraphicalUnitTester.py
         ├── __init__.py
         ├── testing_utils.py
         └── video_tester.py
@@ -177,7 +194,7 @@ Here's an example in ``test_geometry.py``:
 .. code:: python
 
   from manim import *
-  from tests.test_graphical_units.testing.frames_comparison import frames_comparison
+  from manim.utils.testing.frames_comparison import frames_comparison
 
   __module_test__ = "geometry"
 
@@ -221,6 +238,15 @@ For the example above, it would be
     pytest test_geometry.py::test_circle --set_test -s
 
 (``-s`` is here to see manim logs, so you can see what's going on).
+
+If you want to see all the control data frames (e.g. to make sure your test is doing what you want), use the
+``extract_frames.py`` script. The first parameter is the path to a ``.npz`` file and the second parameter is the
+directory you want the frames created. The frames will be named ``frame0.png``, ``frame1.png``, etc.
+
+.. code-block:: bash
+
+    python scripts/extract_frames.py tests/test_graphical_units/control_data/plot/axes.npz output
+
 
 Please make sure to add the control data to git as soon as it is produced with ``git add <your-control-data.npz>``.
 

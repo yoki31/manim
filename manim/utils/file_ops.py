@@ -1,8 +1,11 @@
 """Utility functions for interacting with the file system."""
 
+from __future__ import annotations
+
 __all__ = [
     "add_extension_if_not_present",
     "guarantee_existence",
+    "guarantee_empty_existence",
     "seek_full_path_from_defaults",
     "modify_atime",
     "open_file",
@@ -12,14 +15,22 @@ __all__ = [
     "is_webm_format",
     "is_mov_format",
     "write_to_movie",
+    "ensure_executable",
 ]
 
 import os
 import platform
+import shutil
 import subprocess as sp
 import time
 from pathlib import Path
 from shutil import copyfile
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from manim.typing import StrPath
+
+    from ..scene.scene_file_writer import SceneFileWriter
 
 from manim import __version__, config, logger
 
@@ -113,68 +124,94 @@ def write_to_movie() -> bool:
     )
 
 
-def add_extension_if_not_present(file_name, extension):
+def ensure_executable(path_to_exe: Path) -> bool:
+    if path_to_exe.parent == Path("."):
+        executable = shutil.which(path_to_exe.stem)
+        if executable is None:
+            return False
+    else:
+        executable = path_to_exe
+    return os.access(executable, os.X_OK)
+
+
+def add_extension_if_not_present(file_name: Path, extension: str) -> Path:
     if file_name.suffix != extension:
-        return file_name.with_suffix(extension)
+        return file_name.with_suffix(file_name.suffix + extension)
     else:
         return file_name
 
 
-def add_version_before_extension(file_name):
-    file_name = Path(file_name)
-    path, name, suffix = file_name.parent, file_name.stem, file_name.suffix
-    return Path(path, f"{name}_ManimCE_v{__version__}{suffix}")
+def add_version_before_extension(file_name: Path) -> Path:
+    return file_name.with_name(
+        f"{file_name.stem}_ManimCE_v{__version__}{file_name.suffix}"
+    )
 
 
-def guarantee_existence(path):
-    if not os.path.exists(path):
-        os.makedirs(path)
-    return os.path.abspath(path)
+def guarantee_existence(path: Path) -> Path:
+    if not path.exists():
+        path.mkdir(parents=True)
+    return path.resolve(strict=True)
 
 
-def seek_full_path_from_defaults(file_name, default_dir, extensions):
-    possible_paths = [file_name]
+def guarantee_empty_existence(path: Path) -> Path:
+    if path.exists():
+        shutil.rmtree(str(path))
+    path.mkdir(parents=True)
+    return path.resolve(strict=True)
+
+
+def seek_full_path_from_defaults(
+    file_name: StrPath, default_dir: Path, extensions: list[str]
+) -> Path:
+    possible_paths = [Path(file_name).expanduser()]
     possible_paths += [
         Path(default_dir) / f"{file_name}{extension}" for extension in ["", *extensions]
     ]
     for path in possible_paths:
-        if os.path.exists(path):
+        if path.exists():
             return path
-    error = f"From: {os.getcwd()}, could not find {file_name} at either of these locations: {possible_paths}"
+    error = (
+        f"From: {Path.cwd()}, could not find {file_name} at either "
+        f"of these locations: {list(map(str, possible_paths))}"
+    )
     raise OSError(error)
 
 
-def modify_atime(file_path):
+def modify_atime(file_path: str) -> None:
     """Will manually change the accessed time (called `atime`) of the file, as on a lot of OS the accessed time refresh is disabled by default.
 
     Parameters
     ----------
-    file_path : :class:`str`
+    file_path
         The path of the file.
     """
-    os.utime(file_path, times=(time.time(), os.path.getmtime(file_path)))
+    os.utime(file_path, times=(time.time(), Path(file_path).stat().st_mtime))
 
 
-def open_file(file_path, in_browser=False):
+def open_file(file_path: Path, in_browser: bool = False) -> None:
     current_os = platform.system()
     if current_os == "Windows":
-        os.startfile(file_path if not in_browser else os.path.dirname(file_path))
+        os.startfile(file_path if not in_browser else file_path.parent)
     else:
         if current_os == "Linux":
             commands = ["xdg-open"]
-            file_path = file_path if not in_browser else os.path.dirname(file_path)
+            file_path = file_path if not in_browser else file_path.parent
         elif current_os.startswith("CYGWIN"):
             commands = ["cygstart"]
-            file_path = file_path if not in_browser else os.path.dirname(file_path)
+            file_path = file_path if not in_browser else file_path.parent
         elif current_os == "Darwin":
             commands = ["open"] if not in_browser else ["open", "-R"]
         else:
             raise OSError("Unable to identify your operating system...")
+
+        # check after so that file path is set correctly
+        if config.preview_command:
+            commands = [config.preview_command]
         commands.append(file_path)
-        sp.Popen(commands)
+        sp.run(commands)
 
 
-def open_media_file(file_writer):
+def open_media_file(file_writer: SceneFileWriter) -> None:
     file_paths = []
 
     if config["save_last_frame"]:
@@ -193,7 +230,7 @@ def open_media_file(file_writer):
             logger.info(f"Previewed File at: '{file_path}'")
 
 
-def get_template_names():
+def get_template_names() -> list[str]:
     """Returns template names from the templates directory.
 
     Returns
@@ -204,7 +241,7 @@ def get_template_names():
     return [template_name.stem for template_name in template_path.glob("*.mtp")]
 
 
-def get_template_path():
+def get_template_path() -> Path:
     """Returns the Path of templates directory.
 
     Returns
@@ -214,28 +251,30 @@ def get_template_path():
     return Path.resolve(Path(__file__).parent.parent / "templates")
 
 
-def add_import_statement(file):
+def add_import_statement(file: Path) -> None:
     """Prepends an import statement in a file
 
     Parameters
     ----------
-        file : :class:`Path`
+        file
     """
-    with open(file, "r+") as f:
+    with file.open("r+") as f:
         import_line = "from manim import *"
         content = f.read()
-        f.seek(0, 0)
-        f.write(import_line.rstrip("\r\n") + "\n" + content)
+        f.seek(0)
+        f.write(import_line + "\n" + content)
 
 
-def copy_template_files(project_dir=Path("."), template_name="Default"):
+def copy_template_files(
+    project_dir: Path = Path("."), template_name: str = "Default"
+) -> None:
     """Copies template files from templates dir to project_dir.
 
     Parameters
     ----------
-        project_dir : :class:`Path`
+        project_dir
             Path to project directory.
-        template_name : :class:`str`
+        template_name
             Name of template.
     """
     template_cfg_path = Path.resolve(

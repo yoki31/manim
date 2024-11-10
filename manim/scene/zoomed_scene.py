@@ -45,6 +45,8 @@ Examples
 
 """
 
+from __future__ import annotations
+
 __all__ = ["ZoomedScene"]
 
 
@@ -54,7 +56,6 @@ from ..camera.multi_camera import MultiCamera
 from ..constants import *
 from ..mobject.types.image_mobject import ImageMobjectFromCamera
 from ..scene.moving_camera_scene import MovingCameraScene
-from ..utils.simple_functions import fdiv
 
 # Note, any scenes from old videos using ZoomedScene will almost certainly
 # break, as it was restructured.
@@ -84,7 +85,7 @@ class ZoomedScene(MovingCameraScene):
         zoom_factor=0.15,
         image_frame_stroke_width=3,
         zoom_activated=False,
-        **kwargs
+        **kwargs,
     ):
         self.zoomed_display_height = zoomed_display_height
         self.zoomed_display_width = zoomed_display_width
@@ -131,14 +132,14 @@ class ZoomedScene(MovingCameraScene):
         self.zoomed_camera = zoomed_camera
         self.zoomed_display = zoomed_display
 
-    def activate_zooming(self, animate=False):
+    def activate_zooming(self, animate: bool = False):
         """
         This method is used to activate the zooming for
         the zoomed_camera.
 
         Parameters
         ----------
-        animate : bool, optional
+        animate
             Whether or not to animate the activation
             of the zoomed camera.
         """
@@ -152,13 +153,13 @@ class ZoomedScene(MovingCameraScene):
             self.zoomed_display,
         )
 
-    def get_zoom_in_animation(self, run_time=2, **kwargs):
+    def get_zoom_in_animation(self, run_time: float = 2, **kwargs):
         """
         Returns the animation of camera zooming in.
 
         Parameters
         ----------
-        run_time : int or float, optional
+        run_time
             The run_time of the animation of the camera zooming in.
         **kwargs
             Any valid keyword arguments of ApplyMethod()
@@ -205,4 +206,4 @@ class ZoomedScene(MovingCameraScene):
         float
             The zoom factor.
         """
-        return fdiv(self.zoomed_camera.frame.height, self.zoomed_display.height)
+        return self.zoomed_camera.frame.height / self.zoomed_display.height

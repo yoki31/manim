@@ -15,11 +15,7 @@ msgid "Qualified name: ``manim.animation.movement.SmoothedVectorizedHomotopy``"
 msgstr ""
 
 #: ../../../manim/animation/movement.py:docstring of manim.animation.movement.SmoothedVectorizedHomotopy:1
-msgid "Bases: :class:`manim.animation.movement.Homotopy`"
-msgstr ""
-
-#: ../../../manim/animation/movement.py:docstring of manim.animation.movement.SmoothedVectorizedHomotopy:1
-msgid "Homotopy is a function from (x, y, z, t) to (x', y', z')"
+msgid "Bases: :py:class:`manim.animation.movement.Homotopy`"
 msgstr ""
 
 #: ../../source/reference/manim.animation.movement.SmoothedVectorizedHomotopy.rst:14

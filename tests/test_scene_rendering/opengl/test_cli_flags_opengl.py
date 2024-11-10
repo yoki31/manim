@@ -1,12 +1,16 @@
+from __future__ import annotations
+
 import sys
 
 import numpy as np
+import pytest
 from click.testing import CliRunner
 from PIL import Image
 
-from manim.__main__ import main
+from manim import capture, get_video_metadata
+from manim.__main__ import __version__, main
 from manim.utils.file_ops import add_version_before_extension
-from tests.utils.video_tester import *
+from tests.utils.video_tester import video_comparison
 
 
 @pytest.mark.slow
@@ -25,11 +29,48 @@ def test_basic_scene_with_default_values(tmp_path, manim_cfg_file, simple_scenes
         "--write_to_movie",
         "--media_dir",
         str(tmp_path),
-        simple_scenes_path,
+        str(simple_scenes_path),
         scene_name,
     ]
     out, err, exit_code = capture(command)
     assert exit_code == 0, err
+
+
+@pytest.mark.slow
+def test_resolution_flag(tmp_path, manim_cfg_file, simple_scenes_path):
+    scene_name = "NoAnimations"
+    # test different separators
+    resolutions = [
+        (720, 480, ";"),
+        (1280, 720, ","),
+        (1920, 1080, "-"),
+        (2560, 1440, ";"),
+        # (3840, 2160, ","),
+        # (640, 480, "-"),
+        # (800, 600, ";"),
+    ]
+
+    for width, height, separator in resolutions:
+        command = [
+            sys.executable,
+            "-m",
+            "manim",
+            "--media_dir",
+            str(tmp_path),
+            "--resolution",
+            f"{width}{separator}{height}",
+            str(simple_scenes_path),
+            scene_name,
+        ]
+
+        _, err, exit_code = capture(command)
+        assert exit_code == 0, err
+
+        path = (
+            tmp_path / "videos" / "simple_scenes" / f"{height}p60" / f"{scene_name}.mp4"
+        )
+        meta = get_video_metadata(path)
+        assert (width, height) == (meta["width"], meta["height"])
 
 
 @pytest.mark.slow
@@ -49,7 +90,7 @@ def test_basic_scene_l_flag(tmp_path, manim_cfg_file, simple_scenes_path):
         "--write_to_movie",
         "--media_dir",
         str(tmp_path),
-        simple_scenes_path,
+        str(simple_scenes_path),
         scene_name,
     ]
     out, err, exit_code = capture(command)
@@ -59,7 +100,7 @@ def test_basic_scene_l_flag(tmp_path, manim_cfg_file, simple_scenes_path):
 @pytest.mark.slow
 @video_comparison(
     "SceneWithMultipleCallsWithNFlag.json",
-    "videos/simple_scenes/1080p60/SceneWithMultipleCalls.mp4",
+    "videos/simple_scenes/480p15/SceneWithMultipleCalls.mp4",
 )
 def test_n_flag(tmp_path, simple_scenes_path):
     scene_name = "SceneWithMultipleCalls"
@@ -67,13 +108,14 @@ def test_n_flag(tmp_path, simple_scenes_path):
         sys.executable,
         "-m",
         "manim",
+        "-ql",
         "--renderer",
         "opengl",
         "--write_to_movie",
         "-n 3,6",
         "--media_dir",
         str(tmp_path),
-        simple_scenes_path,
+        str(simple_scenes_path),
         scene_name,
     ]
     _, err, exit_code = capture(command)
@@ -93,7 +135,7 @@ def test_s_flag_no_animations(tmp_path, manim_cfg_file, simple_scenes_path):
         "-s",
         "--media_dir",
         str(tmp_path),
-        simple_scenes_path,
+        str(simple_scenes_path),
         scene_name,
     ]
     out, err, exit_code = capture(command)
@@ -104,6 +146,118 @@ def test_s_flag_no_animations(tmp_path, manim_cfg_file, simple_scenes_path):
 
     is_empty = not any((tmp_path / "images" / "simple_scenes").iterdir())
     assert not is_empty, "running manim with -s flag did not render an image"
+
+
+@pytest.mark.slow
+def test_image_output_for_static_scene(tmp_path, manim_cfg_file, simple_scenes_path):
+    scene_name = "StaticScene"
+    command = [
+        sys.executable,
+        "-m",
+        "manim",
+        "--renderer",
+        "opengl",
+        "-ql",
+        "--media_dir",
+        str(tmp_path),
+        str(simple_scenes_path),
+        scene_name,
+    ]
+    out, err, exit_code = capture(command)
+    assert exit_code == 0, err
+
+    exists = (tmp_path / "videos").exists()
+    assert not exists, "running manim with static scene rendered a video"
+
+    is_empty = not any((tmp_path / "images" / "simple_scenes").iterdir())
+    assert not is_empty, "running manim without animations did not render an image"
+
+
+@pytest.mark.slow
+def test_no_image_output_with_interactive_embed(
+    tmp_path, manim_cfg_file, simple_scenes_path
+):
+    """Check no image is output for a static scene when interactive embed is called"""
+    scene_name = "InteractiveStaticScene"
+    command = [
+        sys.executable,
+        "-m",
+        "manim",
+        "--renderer",
+        "opengl",
+        "-ql",
+        "--media_dir",
+        str(tmp_path),
+        str(simple_scenes_path),
+        scene_name,
+    ]
+    out, err, exit_code = capture(command)
+    assert exit_code == 0, err
+
+    exists = (tmp_path / "videos").exists()
+    assert not exists, "running manim with static scene rendered a video"
+
+    is_empty = not any((tmp_path / "images" / "simple_scenes").iterdir())
+    assert (
+        is_empty
+    ), "running manim static scene with interactive embed rendered an image"
+
+
+@pytest.mark.slow
+def test_no_default_image_output_with_non_static_scene(
+    tmp_path, manim_cfg_file, simple_scenes_path
+):
+    scene_name = "SceneWithNonStaticWait"
+    command = [
+        sys.executable,
+        "-m",
+        "manim",
+        "--renderer",
+        "opengl",
+        "-ql",
+        "--media_dir",
+        str(tmp_path),
+        str(simple_scenes_path),
+        scene_name,
+    ]
+    out, err, exit_code = capture(command)
+    assert exit_code == 0, err
+
+    exists = (tmp_path / "videos").exists()
+    assert not exists, "running manim with static scene rendered a video"
+
+    is_empty = not any((tmp_path / "images" / "simple_scenes").iterdir())
+    assert (
+        is_empty
+    ), "running manim static scene with interactive embed rendered an image"
+
+
+@pytest.mark.slow
+def test_image_output_for_static_scene_with_write_to_movie(
+    tmp_path, manim_cfg_file, simple_scenes_path
+):
+    scene_name = "StaticScene"
+    command = [
+        sys.executable,
+        "-m",
+        "manim",
+        "--write_to_movie",
+        "--renderer",
+        "opengl",
+        "-ql",
+        "--media_dir",
+        str(tmp_path),
+        str(simple_scenes_path),
+        scene_name,
+    ]
+    out, err, exit_code = capture(command)
+    assert exit_code == 0, err
+
+    is_empty = not any((tmp_path / "videos").iterdir())
+    assert not is_empty, "running manim with static scene rendered a video"
+
+    is_empty = not any((tmp_path / "images" / "simple_scenes").iterdir())
+    assert not is_empty, "running manim without animations did not render an image"
 
 
 @pytest.mark.slow
@@ -119,7 +273,7 @@ def test_s_flag(tmp_path, manim_cfg_file, simple_scenes_path):
         "-s",
         "--media_dir",
         str(tmp_path),
-        simple_scenes_path,
+        str(simple_scenes_path),
         scene_name,
     ]
     out, err, exit_code = capture(command)
@@ -147,7 +301,7 @@ def test_r_flag(tmp_path, manim_cfg_file, simple_scenes_path):
         str(tmp_path),
         "-r",
         "200,100",
-        simple_scenes_path,
+        str(simple_scenes_path),
         scene_name,
     ]
     out, err, exit_code = capture(command)
@@ -175,7 +329,7 @@ def test_a_flag(tmp_path, manim_cfg_file, infallible_scenes_path):
         "--media_dir",
         str(tmp_path),
         "-a",
-        infallible_scenes_path,
+        str(infallible_scenes_path),
     ]
     out, err, exit_code = capture(command)
     assert exit_code == 0, err
@@ -186,10 +340,15 @@ def test_a_flag(tmp_path, manim_cfg_file, infallible_scenes_path):
     assert one_is_not_empty, "running manim with -a flag did not render the first scene"
 
     two_is_not_empty = (
-        tmp_path / "videos" / "infallible_scenes" / "480p15" / "Wait2.mp4"
+        tmp_path / "images" / "infallible_scenes" / f"Wait2_ManimCE_v{__version__}.png"
+    ).is_file()
+    assert two_is_not_empty, "running manim with -a flag did not render an image, possible leak of the config dictionary"
+
+    three_is_not_empty = (
+        tmp_path / "videos" / "infallible_scenes" / "480p15" / "Wait3.mp4"
     ).is_file()
     assert (
-        two_is_not_empty
+        three_is_not_empty
     ), "running manim with -a flag did not render the second scene"
 
 
@@ -207,7 +366,7 @@ def test_custom_folders(tmp_path, manim_cfg_file, simple_scenes_path):
         "--media_dir",
         str(tmp_path),
         "--custom_folders",
-        simple_scenes_path,
+        str(simple_scenes_path),
         scene_name,
     ]
     out, err, exit_code = capture(command)
@@ -261,7 +420,7 @@ def test_gif_format_output(tmp_path, manim_cfg_file, simple_scenes_path):
         str(tmp_path),
         "--format",
         "gif",
-        simple_scenes_path,
+        str(simple_scenes_path),
         scene_name,
     ]
     out, err, exit_code = capture(command)
@@ -274,12 +433,8 @@ def test_gif_format_output(tmp_path, manim_cfg_file, simple_scenes_path):
         unexpected_mp4_path,
     )
 
-    expected_gif_path = (
-        tmp_path
-        / "videos"
-        / "simple_scenes"
-        / "480p15"
-        / add_version_before_extension("SquareToCircle.gif")
+    expected_gif_path = add_version_before_extension(
+        tmp_path / "videos" / "simple_scenes" / "480p15" / "SquareToCircle.gif"
     )
     assert expected_gif_path.exists(), "gif file not found at " + str(expected_gif_path)
 
@@ -299,18 +454,14 @@ def test_mp4_format_output(tmp_path, manim_cfg_file, simple_scenes_path):
         str(tmp_path),
         "--format",
         "mp4",
-        simple_scenes_path,
+        str(simple_scenes_path),
         scene_name,
     ]
     out, err, exit_code = capture(command)
     assert exit_code == 0, err
 
-    unexpected_gif_path = (
-        tmp_path
-        / "videos"
-        / "simple_scenes"
-        / "480p15"
-        / add_version_before_extension("SquareToCircle.gif")
+    unexpected_gif_path = add_version_before_extension(
+        tmp_path / "videos" / "simple_scenes" / "480p15" / "SquareToCircle.gif"
     )
     assert not unexpected_gif_path.exists(), "unexpected gif file found at " + str(
         unexpected_gif_path,
@@ -343,18 +494,14 @@ def test_videos_not_created_when_png_format_set(
         str(tmp_path),
         "--format",
         "png",
-        simple_scenes_path,
+        str(simple_scenes_path),
         scene_name,
     ]
     out, err, exit_code = capture(command)
     assert exit_code == 0, err
 
-    unexpected_gif_path = (
-        tmp_path
-        / "videos"
-        / "simple_scenes"
-        / "480p15"
-        / add_version_before_extension("SquareToCircle.gif")
+    unexpected_gif_path = add_version_before_extension(
+        tmp_path / "videos" / "simple_scenes" / "480p15" / "SquareToCircle.gif"
     )
     assert not unexpected_gif_path.exists(), "unexpected gif file found at " + str(
         unexpected_gif_path,
@@ -387,7 +534,7 @@ def test_images_are_created_when_png_format_set(
         str(tmp_path),
         "--format",
         "png",
-        simple_scenes_path,
+        str(simple_scenes_path),
         scene_name,
     ]
     out, err, exit_code = capture(command)
@@ -418,7 +565,7 @@ def test_images_are_zero_padded_when_zero_pad_set(
         "png",
         "--zero_pad",
         "3",
-        simple_scenes_path,
+        str(simple_scenes_path),
         scene_name,
     ]
     out, err, exit_code = capture(command)
@@ -448,7 +595,7 @@ def test_webm_format_output(tmp_path, manim_cfg_file, simple_scenes_path):
         str(tmp_path),
         "--format",
         "webm",
-        simple_scenes_path,
+        str(simple_scenes_path),
         scene_name,
     ]
     out, err, exit_code = capture(command)
@@ -488,7 +635,7 @@ def test_default_format_output_for_transparent_flag(
         "--media_dir",
         str(tmp_path),
         "-t",
-        simple_scenes_path,
+        str(simple_scenes_path),
         scene_name,
     ]
     out, err, exit_code = capture(command)
@@ -524,7 +671,7 @@ def test_mov_can_be_set_as_output_format(tmp_path, manim_cfg_file, simple_scenes
         str(tmp_path),
         "--format",
         "mov",
-        simple_scenes_path,
+        str(simple_scenes_path),
         scene_name,
     ]
     out, err, exit_code = capture(command)

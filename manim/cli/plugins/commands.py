@@ -5,25 +5,40 @@ plugin``. Here you can specify options, subcommands, and subgroups for the plugi
 group.
 
 """
-import click
 
-from ...constants import CONTEXT_SETTINGS, EPILOG
-from ...plugins.plugins_flags import list_plugins
+from __future__ import annotations
+
+import cloup
+
+from manim.constants import CONTEXT_SETTINGS, EPILOG
+from manim.plugins.plugins_flags import list_plugins
+
+__all__ = ["plugins"]
 
 
-@click.command(
+@cloup.command(
     context_settings=CONTEXT_SETTINGS,
     no_args_is_help=True,
     epilog=EPILOG,
     help="Manages Manim plugins.",
 )
-@click.option(
+@cloup.option(
     "-l",
     "--list",
     "list_available",
     is_flag=True,
     help="List available plugins.",
 )
-def plugins(list_available):
+def plugins(list_available: bool) -> None:
+    """Print a list of all available plugins when calling ``manim plugins -l``
+    or ``manim plugins --list``.
+
+    Parameters
+    ----------
+    list_available
+        If the ``-l`` or ``-list`` option is passed to ``manim plugins``, this
+        parameter will be set to ``True``, which will print a list of all
+        available plugins.
+    """
     if list_available:
         list_plugins()

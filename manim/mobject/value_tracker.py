@@ -1,13 +1,15 @@
-"""Mobjects that dynamically show the change of a variable."""
+"""Simple mobjects that can be used for storing (and updating) a value."""
+
+from __future__ import annotations
 
 __all__ = ["ValueTracker", "ComplexValueTracker"]
 
 
 import numpy as np
 
-from ..mobject.mobject import Mobject
-from ..utils.paths import straight_path
-from .opengl_compatibility import ConvertToOpenGL
+from manim.mobject.mobject import Mobject
+from manim.mobject.opengl.opengl_compatibility import ConvertToOpenGL
+from manim.utils.paths import straight_path
 
 
 class ValueTracker(Mobject, metaclass=ConvertToOpenGL):
@@ -43,7 +45,7 @@ class ValueTracker(Mobject, metaclass=ConvertToOpenGL):
                 self.wait(1)
                 tracker -= 4
                 self.wait(0.5)
-                self.play(tracker.animate.set_value(5)),
+                self.play(tracker.animate.set_value(5))
                 self.wait(0.5)
                 self.play(tracker.animate.set_value(3))
                 self.play(tracker.animate.increment_value(-2))
@@ -69,7 +71,7 @@ class ValueTracker(Mobject, metaclass=ConvertToOpenGL):
 
     def __init__(self, value=0, **kwargs):
         super().__init__(**kwargs)
-        self.set_points(np.zeros((1, 3)))
+        self.set(points=np.zeros((1, 3)))
         self.set_value(value)
 
     def get_value(self) -> float:
@@ -125,12 +127,12 @@ class ValueTracker(Mobject, metaclass=ConvertToOpenGL):
         self.set_value(self.get_value() / d_value)
         return self
 
-    def interpolate(self, mobject1, mobject2, alpha, path_func=straight_path):
+    def interpolate(self, mobject1, mobject2, alpha, path_func=straight_path()):
         """
         Turns self into an interpolation between mobject1
         and mobject2.
         """
-        self.set_points(path_func(mobject1.points, mobject2.points, alpha))
+        self.set(points=path_func(mobject1.points, mobject2.points, alpha))
         return self
 
 
@@ -163,7 +165,8 @@ class ComplexValueTracker(ValueTracker):
         """Get the current value of this value tracker as a complex number.
 
         The value is internally stored as a points array [a, b, 0]. This can be accessed directly
-        to represent the value geometrically, see the usage example."""
+        to represent the value geometrically, see the usage example.
+        """
         return complex(*self.points[0, :2])
 
     def set_value(self, z):

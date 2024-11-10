@@ -54,7 +54,7 @@ PASTE HERE OR PROVIDE LINK TO https://pastebin.com/ OR SIMILAR
 
 <details><summary>System Details</summary>
 
-- OS (with version, e.g Windows 10 v2004 or macOS 10.15 (Catalina)):
+- OS (with version, e.g., Windows 10 v2004 or macOS 10.15 (Catalina)):
 - RAM:
 - Python version (`python/py/python3 --version`):
 - Installed modules (provide output from `pip list`):
@@ -68,15 +68,6 @@ PASTE HERE
 + LaTeX distribution (e.g. TeX Live 2020):
 + Installed LaTeX packages:
 <!-- output of `tlmgr list --only-installed` for TeX Live or a screenshot of the Packages page for MikTeX -->
-</details>
-
-<details><summary>FFMPEG</summary>
-
-Output of `ffmpeg -version`:
-
-```
-PASTE HERE
-```
 </details>
 
 ## Additional comments
